@@ -756,6 +756,89 @@ def cmd_export(args: argparse.Namespace) -> None:
                       f"{br['Conduit Height (mm)']:<12}")
 
 
+def cmd_size(args: argparse.Namespace) -> None:
+    """Run HEC-22 inlet sizing using catchment outflow."""
+    from hec22_calculator import size_inlet_from_iddx, GRATE_TYPE_NAMES
+
+    model = IddxModel.open(args.model)
+    phase = _resolve_phase(model, args.phase)
+    inlet_nodes = _collect_inlet_nodes(phase)
+    hec22_inlets = [n for n in inlet_nodes if n.inlet.hec22_config is not None]
+
+    if not hec22_inlets:
+        print("No HEC-22 inlets found.")
+        return
+
+    # Build catchment -> node mapping for rational method flow
+    cat_map: dict[str, list] = {}
+    for c in phase.catchments:
+        if c.to_dest_guid:
+            cat_map.setdefault(c.to_dest_guid, []).append(c)
+
+    intensity = args.intensity
+    flows: dict[str, float] = {}
+    for node_guid, cats in cat_map.items():
+        total = 0.0
+        for c in cats:
+            A_m2 = c.area * 2_589_988.0
+            total += c.cv * (intensity / 3_600_000.0) * A_m2
+        flows[node_guid] = total
+
+    max_spread = args.max_spread
+
+    print("=" * 100)
+    print(f"HEC-22 INLET SIZING -- {os.path.basename(args.model)}")
+    print(f"Phase: {phase.label}  |  Rainfall: {intensity:.1f} mm/hr  |  Max spread: {max_spread:.1f}m")
+    print("=" * 100)
+    print(f"{'Node':<15} {'Type':<8} {'Q_approach':>11} {'Q_captured':>11} "
+          f"{'Q_bypass':>11} {'Eff%':>6} {'Spread':>8} {'Flag':<8}")
+    print("-" * 88)
+
+    exceeds = 0
+    for inode in sorted(hec22_inlets, key=lambda n: n.node_label):
+        inlet = inode.inlet
+        Q = flows.get(inode.node_guid, 0.0)
+        result = size_inlet_from_iddx(inlet, Q)
+        itype = {0: "Grate", 1: "Curb", 2: "Combo", 3: "Slotted"}.get(
+            inlet.hec22_config.hec22_inlet_type, "?")
+
+        flag = ""
+        if result.spread > max_spread and max_spread > 0:
+            flag = "EXCEEDS"
+            exceeds += 1
+
+        print(f"{inode.node_label:<15} {itype:<8} "
+              f"{result.approach_flow:>11.6f} {result.captured_flow:>11.6f} "
+              f"{result.bypass_flow:>11.6f} {result.efficiency * 100:>5.1f}% "
+              f"{result.spread:>7.3f}m {flag:<8}")
+
+    print(f"\n{len(hec22_inlets)} inlets sized. "
+          f"{exceeds} exceed {max_spread:.1f}m spread limit.")
+
+    if args.csv:
+        rows = []
+        for inode in sorted(hec22_inlets, key=lambda n: n.node_label):
+            Q = flows.get(inode.node_guid, 0.0)
+            result = size_inlet_from_iddx(inode.inlet, Q)
+            rows.append({
+                "Node": inode.node_label,
+                "Type": {0: "Grate", 1: "Curb", 2: "Combo", 3: "Slotted"}.get(
+                    inode.inlet.hec22_config.hec22_inlet_type, "?"),
+                "Q Approach (m3/s)": f"{result.approach_flow:.6f}",
+                "Q Captured (m3/s)": f"{result.captured_flow:.6f}",
+                "Q Bypass (m3/s)": f"{result.bypass_flow:.6f}",
+                "Efficiency (%)": f"{result.efficiency * 100:.1f}",
+                "Spread (m)": f"{result.spread:.3f}",
+                "Velocity (m/s)": f"{result.velocity:.3f}",
+                "Gutter Depth (m)": f"{result.gutter_depth:.4f}",
+            })
+        with open(args.csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"Results exported to {args.csv}")
+
+
 # -- CLI ------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -807,6 +890,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--phase", help="Phase label (default: first phase)")
     p_export.add_argument("--csv", help="Export to CSV file (default: print to console)")
 
+    # size
+    p_size = sub.add_parser("size", help="HEC-22 inlet sizing using catchment outflow")
+    p_size.add_argument("model", help="Path to .iddx file")
+    p_size.add_argument("--phase", help="Phase label (default: first phase)")
+    p_size.add_argument("--intensity", type=float, default=50.0,
+                        help="Rainfall intensity in mm/hr (default: 50)")
+    p_size.add_argument("--max-spread", type=float, default=3.0,
+                        help="Max allowable spread in meters (default: 3.0)")
+    p_size.add_argument("--csv", help="Export sizing results to CSV")
+
+    # gui
+    sub.add_parser("gui", help="Launch graphical interface")
+
     return parser
 
 
@@ -814,12 +910,18 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.command == "gui":
+        from inlet_bypass_gui import main as gui_main
+        gui_main()
+        return
+
     commands = {
         "report": cmd_report,
         "audit": cmd_audit,
         "edit": cmd_edit,
         "auto-bypass": cmd_auto_bypass,
         "export": cmd_export,
+        "size": cmd_size,
     }
     commands[args.command](args)
 

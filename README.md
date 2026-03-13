@@ -212,6 +212,8 @@ python examples/01_model_summary.py "C:\path\to\project.iddx"
 | **Edit inlet sizing** | Modify gutter slope, grate dimensions, clogging, depression and save back |
 | **Audit bypass connections** | Filter `phase.connections` with `.is_bypass`, inspect cross-sections |
 | **Automate bypass routing** | Create `CustomCon` bypass connections between inlets programmatically |
+| **HEC-22 inlet sizing** | `size` command computes capacity, spread, bypass using catchment outflow |
+| **GUI for inlet work** | `python tools/inlet_bypass_gui.py` for graphical inlet sizing and editing |
 
 ---
 
@@ -393,6 +395,16 @@ python tools/inlet_bypass_tool.py auto-bypass project.iddx -o updated.iddx  # ap
 python tools/inlet_bypass_tool.py auto-bypass project.iddx --max-distance 100  # limit search radius
 ```
 
+### `size` -- HEC-22 inlet sizing
+
+Run HEC-22 capacity calculations using catchment outflow as approach flow. Uses rational method (Q=CiA) to compute flow from catchments draining to each inlet, then applies FHWA HEC-22 methodology (gutter flow, splash-over, interception) to compute captured flow, bypass flow, spread, and efficiency.
+
+```bash
+python tools/inlet_bypass_tool.py size project.iddx --intensity 75       # 75 mm/hr rainfall
+python tools/inlet_bypass_tool.py size project.iddx --max-spread 2.5     # flag inlets > 2.5m spread
+python tools/inlet_bypass_tool.py size project.iddx --csv sizing.csv     # export results
+```
+
 ### `export` -- Export to CSV
 
 Export a complete inlet schedule with all HEC-22 parameters and bypass connections.
@@ -400,6 +412,15 @@ Export a complete inlet schedule with all HEC-22 parameters and bypass connectio
 ```bash
 python tools/inlet_bypass_tool.py export project.iddx --csv inlet_schedule.csv
 python tools/inlet_bypass_tool.py export project.iddx  # print to console
+```
+
+### `gui` -- Graphical interface
+
+Launch a tkinter-based GUI with model browsing, phase selection, flow source options (rational method or SWMM results), and an interactive results table with spread limit highlighting.
+
+```bash
+python tools/inlet_bypass_tool.py gui
+python tools/inlet_bypass_gui.py    # or run directly
 ```
 
 ---
@@ -423,7 +444,9 @@ InfoDrainage-Python-Package/
 │   ├── exceptions.py            <- Typed exceptions (IddxParseError, ResultsError, etc.)
 │   └── cli.py                   <- Command-line interface (iddx command)
 ├── tools/                       <- Standalone automation tools
-│   └── inlet_bypass_tool.py     <- Inlet & bypass connection automation
+│   ├── inlet_bypass_tool.py     <- CLI: report, audit, edit, auto-bypass, size, export
+│   ├── inlet_bypass_gui.py      <- GUI: tkinter interface for inlet sizing and editing
+│   └── hec22_calculator.py      <- HEC-22 math engine (gutter flow, spread, interception)
 └── examples/                    <- Ready-to-run example scripts
 ```
 
