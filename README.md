@@ -344,25 +344,87 @@ for rp, r in sorted(all_results["Proposed"].items()):
 
 ---
 
+## Inlet & Bypass Tool
+
+A standalone automation tool in `tools/inlet_bypass_tool.py` that uses `iddx_core` to inspect, audit, edit, and auto-generate HEC-22 inlet configurations and bypass connections.
+
+### `report` -- Full inlet inventory
+
+Scan a model and display all HEC-22 inlets, their gutter/grate/combo configurations, bypass connections, and traced bypass chains.
+
+```bash
+python tools/inlet_bypass_tool.py report project.iddx
+python tools/inlet_bypass_tool.py report project.iddx --phase "Proposed"
+```
+
+### `audit` -- Check for issues
+
+Run automated checks: broken bypass GUIDs, missing HEC-22 config, 100% clogging, zero gutter width, duplicate bypass connections.
+
+```bash
+python tools/inlet_bypass_tool.py audit project.iddx
+```
+
+### `edit` -- Bulk-edit inlet properties
+
+Apply changes to all HEC-22 inlets globally. Combine multiple flags in one call.
+
+```bash
+python tools/inlet_bypass_tool.py edit project.iddx -o updated.iddx --clogging 10
+python tools/inlet_bypass_tool.py edit project.iddx -o updated.iddx --gutter-n 0.016
+python tools/inlet_bypass_tool.py edit project.iddx -o updated.iddx --depression 25.4 --grate-type 3
+```
+
+| Flag | Description |
+|------|-------------|
+| `--clogging <pct>` | Set clogging factor (%) on all HEC-22 inlets |
+| `--gutter-n <n>` | Set gutter Manning's n |
+| `--gutter-width <m>` | Set gutter width (meters) |
+| `--depression <mm>` | Set local depression (mm) |
+| `--grate-type <int>` | Set SWMM5 grate type (0-7) |
+
+### `auto-bypass` -- Create bypass connections
+
+Automatically find HEC-22 inlets without bypass and create `CustomCon` bypass connections to the nearest suitable inlet.
+
+```bash
+python tools/inlet_bypass_tool.py auto-bypass project.iddx --dry-run        # preview only
+python tools/inlet_bypass_tool.py auto-bypass project.iddx -o updated.iddx  # apply changes
+python tools/inlet_bypass_tool.py auto-bypass project.iddx --max-distance 100  # limit search radius
+```
+
+### `export` -- Export to CSV
+
+Export a complete inlet schedule with all HEC-22 parameters and bypass connections.
+
+```bash
+python tools/inlet_bypass_tool.py export project.iddx --csv inlet_schedule.csv
+python tools/inlet_bypass_tool.py export project.iddx  # print to console
+```
+
+---
+
 ## Package Structure
 
 ```
 InfoDrainage-Python-Package/
-├── pyproject.toml               ← Package metadata, dependencies, CLI entry point
-├── README.md                    ← This file
-├── iddx_core/                   ← The Python package
-│   ├── __init__.py              ← Public API exports (v0.4.2)
-│   ├── model.py                 ← IddxModel (open/save/create)
-│   ├── phase.py                 ← Phase (scenario container)
-│   ├── nodes.py                 ← Catchment, Junction, DrainageSystem
-│   ├── connections.py           ← Connection (pipes, channels)
-│   ├── rainfall.py              ← RainfallSource, StormEvent
-│   ├── results.py               ← ResultsReader (read SWMM .out binary files)
-│   ├── enums.py                 ← RunoffMethod, OutletType, etc.
-│   ├── utils.py                 ← XML helpers, GUID generation
-│   ├── exceptions.py            ← Typed exceptions (IddxParseError, ResultsError, etc.)
-│   └── cli.py                   ← Command-line interface (iddx command)
-└── examples/                    ← Ready-to-run example scripts
+├── pyproject.toml               <- Package metadata, dependencies, CLI entry point
+├── README.md                    <- This file
+├── iddx_core/                   <- The Python package
+│   ├── __init__.py              <- Public API exports (v0.4.2)
+│   ├── model.py                 <- IddxModel (open/save/create)
+│   ├── phase.py                 <- Phase (scenario container)
+│   ├── nodes.py                 <- Catchment, Junction, DrainageSystem, HEC-22 inlet classes
+│   ├── connections.py           <- Connection (pipes, channels, bypass), CrossSection, RatRes
+│   ├── rainfall.py              <- RainfallSource, StormEvent
+│   ├── results.py               <- ResultsReader (read SWMM .out binary files)
+│   ├── enums.py                 <- RunoffMethod, OutletType, Hec22InletType, etc.
+│   ├── utils.py                 <- XML helpers, GUID generation
+│   ├── exceptions.py            <- Typed exceptions (IddxParseError, ResultsError, etc.)
+│   └── cli.py                   <- Command-line interface (iddx command)
+├── tools/                       <- Standalone automation tools
+│   └── inlet_bypass_tool.py     <- Inlet & bypass connection automation
+└── examples/                    <- Ready-to-run example scripts
 ```
 
 ---
