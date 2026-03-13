@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iddx-core"
-version = "0.4.1"
+version = "0.4.2"
 description = "Pure-Python toolkit for reading, writing, and automating Autodesk InfoDrainage .iddx project files and SWMM results."
 readme = "README.md"
 license = {text = "MIT"}

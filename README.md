@@ -208,6 +208,10 @@ python examples/01_model_summary.py "C:\path\to\project.iddx"
 | **Compare design iterations** | Read multiple `.iddx` files and compare element counts/properties |
 | **Read SWMM results** | `ResultsReader` parses `.out` files for peak flows, depths, flooding |
 | **Compare storms** | `iddx compare` or `load_results()` to compare peaks across return periods |
+| **Read inlet HEC-22 config** | Access `inlet.hec22_config.gutter`, `.combo`, `.grate` for full sizing params |
+| **Edit inlet sizing** | Modify gutter slope, grate dimensions, clogging, depression and save back |
+| **Audit bypass connections** | Filter `phase.connections` with `.is_bypass`, inspect cross-sections |
+| **Automate bypass routing** | Create `CustomCon` bypass connections between inlets programmatically |
 
 ---
 
@@ -222,7 +226,11 @@ python examples/01_model_summary.py "C:\path\to\project.iddx"
 | `Catchment` | Inflow area. Key properties: `.label`, `.area`, `.cv`, `.pimp`, `.runoff_method` |
 | `Junction` | Manhole, inlet, or outfall. Key properties: `.label`, `.cover_level`, `.invert_level`, `.is_outfall` |
 | `DrainageSystem` | Stormwater control (pond, tank, swale, etc.). Key properties: `.label`, `.system_type`, `.depth` |
-| `Connection` | Pipe or channel. Key properties: `.label`, `.diameter`, `.length`, `.mannings_n` |
+| `Connection` | Pipe, channel, or bypass. Key properties: `.label`, `.diameter`, `.length`, `.mannings_n`, `.is_bypass` |
+| `Hec22InletConfig` | HEC-22 inlet sizing inputs. Key properties: `.hec22_inlet_type`, `.gutter`, `.grate`, `.combo`, `.curb`, `.slotted` |
+| `CrossSectionDetails` | Custom cross-section for bypass connections. Key properties: `.points`, `.con_covered` |
+| `RationalResults` | Rational-method design results on a connection (read-only). Key properties: `.flow`, `.velocity`, `.capacity` |
+| `UpstreamTotals` | Accumulated upstream area/flow totals on a connection (read-only). Key properties: `.area`, `.contributing_area` |
 | `RainfallSource` | Rainfall data (NOAA, FEH, etc.). Key properties: `.label`, `.return_periods` |
 | `ResultsReader` | Read SWMM simulation results from `.out` files. Key methods: `.node_summary()`, `.link_summary()`, `.node_time_series()`, `.link_time_series()` |
 
@@ -256,7 +264,10 @@ except ResultsError as e:
 |------|--------|
 | `RunoffMethod` | `RATIONAL`, `SCS_CURVE_NUMBER`, `SWMM`, `STATIC`, `FOUL`, and others |
 | `DrainageSystemType` | `POND`, `SWALE`, `BIORETENTION`, `POROUS_PAVEMENT`, `CHAMBER`, `TANK` |
-| `ConnectionType` | `CIRCULAR_PIPE`, `BOX_CULVERT`, `TRAPEZOIDAL_CHANNEL`, `TRIANGULAR_CHANNEL` |
+| `ConnectionType` | `CIRCULAR_PIPE`, `BOX_CULVERT`, `TRAPEZOIDAL_CHANNEL`, `TRIANGULAR_CHANNEL`, `CUSTOM_BYPASS` |
+| `Hec22InletType` | `GRATE`, `CURB`, `COMBINATION`, `SLOTTED` |
+| `InletCapacityType` | `NONE`, `LOW_HIGH_FLOW`, `RATED_BY_FLOW`, `HEC_22` |
+| `InletLocation` | `ON_GRADE`, `IN_SAG` |
 | `OutletType` | `FLOW_CONTROL`, `ORIFICE`, `WEIR`, `COMPLEX`, `PUMP`, `FREE_OUTLET` |
 
 ### Common Operations
@@ -340,7 +351,7 @@ InfoDrainage-Python-Package/
 ├── pyproject.toml               ← Package metadata, dependencies, CLI entry point
 ├── README.md                    ← This file
 ├── iddx_core/                   ← The Python package
-│   ├── __init__.py              ← Public API exports (v0.4.0)
+│   ├── __init__.py              ← Public API exports (v0.4.2)
 │   ├── model.py                 ← IddxModel (open/save/create)
 │   ├── phase.py                 ← Phase (scenario container)
 │   ├── nodes.py                 ← Catchment, Junction, DrainageSystem
@@ -357,6 +368,18 @@ InfoDrainage-Python-Package/
 ---
 
 ## Changelog
+
+### 0.4.2
+
+- **Fixed**: Bypass connections (`CustomCon`) were silently dropped during model parsing — added `CUSTOM_BYPASS` to `ConnectionType` and `CustomCon` to `ALL_CONNECTION_TAGS`
+- Added full HEC-22 inlet configuration parsing: `Hec22InletConfig`, `GutterDetail`, `GrateInletParams`, `CurbInletParams`, `ComboInletParams`, `SlottedInletParams`
+- `InletDetail` now reads and writes the complete `HEC22InCapDet` XML block (gutter geometry, grate/curb/combo/slotted sizing params, clogging, depression, location)
+- Added `CrossSectionDetails` — parses custom cross-section geometry on bypass connections (`CrsSctDetails`)
+- Added `RationalResults` — parses rational-method design output (`RatRes`) on connections
+- Added `UpstreamTotals` — parses accumulated upstream totals (`USTot`) on connections
+- Added `Connection.is_bypass` property and `Connection.conduit_height_user` field
+- New enums: `Hec22InletType`, `InletCapacityType`, `InletLocation`
+- Round-trip verified: 32 bypass connections and 43 HEC-22 inlets preserved through save/reload
 
 ### 0.4.1
 

@@ -32,7 +32,7 @@ class ConnectionType(IntEnum):
     BOX_CULVERT = 3
     TRAPEZOIDAL_CHANNEL = 4
     TRIANGULAR_CHANNEL = 5
-    ARCH_CULVERT = 7
+    CUSTOM_BYPASS = 7
     ELLIPSE_CULVERT = 8
 
 
@@ -40,11 +40,12 @@ CONNECTION_ELEMENTS = {
     ConnectionType.CIRCULAR_PIPE: "PipeCon",
     ConnectionType.TRAPEZOIDAL_CHANNEL: "TrapChan",
     ConnectionType.TRIANGULAR_CHANNEL: "TriChan",
+    ConnectionType.CUSTOM_BYPASS: "CustomCon",
 }
 
 ELEMENT_TO_CONNECTION_TYPE = {v: k for k, v in CONNECTION_ELEMENTS.items()}
 
-ALL_CONNECTION_TAGS = ("PipeCon", "TrapChan", "TriChan")
+ALL_CONNECTION_TAGS = ("PipeCon", "TrapChan", "TriChan", "CustomCon")
 
 
 class OutletType(IntEnum):
@@ -106,3 +107,22 @@ DRAINAGE_SYSTEM_ELEMENTS = {
 ELEMENT_TO_DSYS_TYPE = {v: k for k, v in DRAINAGE_SYSTEM_ELEMENTS.items()}
 
 ALL_DSYS_TAGS = tuple(DRAINAGE_SYSTEM_ELEMENTS.values())
+
+
+class Hec22InletType(IntEnum):
+    GRATE = 0
+    CURB = 1
+    COMBINATION = 2
+    SLOTTED = 3
+
+
+class InletCapacityType(IntEnum):
+    NONE = 0
+    LOW_HIGH_FLOW = 1
+    RATED_BY_FLOW = 2
+    HEC_22 = 3
+
+
+class InletLocation(IntEnum):
+    ON_GRADE = 0
+    IN_SAG = 1

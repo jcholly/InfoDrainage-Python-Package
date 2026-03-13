@@ -460,6 +460,242 @@ class Hec22Results:
 
 
 @dataclass
+class GutterDetail:
+    """Gutter cross-section parameters for HEC-22 calculations."""
+    slope: float = 0.0
+    road_x_slope: float = 0.0
+    gutter_x_slope: float = 0.0
+    width: float = 0.0
+    mannings_n: float = 0.013
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> GutterDetail:
+        return cls(
+            slope=get_float(elem, "Slope"),
+            road_x_slope=get_float(elem, "RoadXSlp"),
+            gutter_x_slope=get_float(elem, "GutterXSlp"),
+            width=get_float(elem, "Width"),
+            mannings_n=get_float(elem, "ManningsN", 0.013),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("GutterDet")
+        set_float(elem, "Slope", self.slope)
+        set_float(elem, "RoadXSlp", self.road_x_slope)
+        set_float(elem, "GutterXSlp", self.gutter_x_slope)
+        set_float(elem, "Width", self.width)
+        set_float(elem, "ManningsN", self.mannings_n)
+        return elem
+
+
+@dataclass
+class GrateInletParams:
+    """HEC-22 grate inlet sizing parameters."""
+    location: int = 0
+    depression: float = 0.0
+    clogging: float = 0.0
+    grate_length: float = 0.0
+    width: float = 0.0
+    grate_type_swmm5: int = 3
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> GrateInletParams:
+        return cls(
+            location=get_int(elem, "Loc"),
+            depression=get_float(elem, "Dep"),
+            clogging=get_float(elem, "Clog"),
+            grate_length=get_float(elem, "GrateLength"),
+            width=get_float(elem, "Width"),
+            grate_type_swmm5=get_int(elem, "HEC22GrateTypeSWMM5", 3),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("H22GrateIn")
+        set_int(elem, "Loc", self.location)
+        set_float(elem, "Dep", self.depression)
+        set_float(elem, "Clog", self.clogging)
+        set_float(elem, "GrateLength", self.grate_length)
+        set_float(elem, "Width", self.width)
+        set_int(elem, "HEC22GrateTypeSWMM5", self.grate_type_swmm5)
+        return elem
+
+
+@dataclass
+class CurbInletParams:
+    """HEC-22 curb-opening inlet sizing parameters."""
+    location: int = 0
+    depression: float = 0.0
+    clogging: float = 0.0
+    curb_length: float = 0.0
+    height: float = 0.0
+    throat_angle: int = 0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> CurbInletParams:
+        return cls(
+            location=get_int(elem, "Loc"),
+            depression=get_float(elem, "Dep"),
+            clogging=get_float(elem, "Clog"),
+            curb_length=get_float(elem, "CurbLength"),
+            height=get_float(elem, "Height"),
+            throat_angle=get_int(elem, "HEC22ThroatAngle"),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("H22CurbIn")
+        set_int(elem, "Loc", self.location)
+        set_float(elem, "Dep", self.depression)
+        set_float(elem, "Clog", self.clogging)
+        set_float(elem, "CurbLength", self.curb_length)
+        set_float(elem, "Height", self.height)
+        set_int(elem, "HEC22ThroatAngle", self.throat_angle)
+        return elem
+
+
+@dataclass
+class ComboInletParams:
+    """HEC-22 combination (grate + curb) inlet sizing parameters."""
+    location: int = 0
+    depression: float = 0.0
+    clogging: float = 0.0
+    grate_length: float = 0.0
+    width: float = 0.0
+    curb_length: float = 0.0
+    height: float = 0.0
+    grate_type_swmm5: int = 3
+    throat_angle: int = 0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> ComboInletParams:
+        return cls(
+            location=get_int(elem, "Loc"),
+            depression=get_float(elem, "Dep"),
+            clogging=get_float(elem, "Clog"),
+            grate_length=get_float(elem, "GrateLength"),
+            width=get_float(elem, "Width"),
+            curb_length=get_float(elem, "CurbLength"),
+            height=get_float(elem, "Height"),
+            grate_type_swmm5=get_int(elem, "HEC22GrateTypeSWMM5", 3),
+            throat_angle=get_int(elem, "HEC22ThroatAngle"),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("H22ComboIn")
+        set_int(elem, "Loc", self.location)
+        set_float(elem, "Dep", self.depression)
+        set_float(elem, "Clog", self.clogging)
+        set_float(elem, "GrateLength", self.grate_length)
+        set_float(elem, "Width", self.width)
+        set_float(elem, "CurbLength", self.curb_length)
+        set_float(elem, "Height", self.height)
+        set_int(elem, "HEC22GrateTypeSWMM5", self.grate_type_swmm5)
+        set_int(elem, "HEC22ThroatAngle", self.throat_angle)
+        return elem
+
+
+@dataclass
+class SlottedInletParams:
+    """HEC-22 slotted drain inlet sizing parameters."""
+    location: int = 0
+    depression: float = 0.0
+    clogging: float = 0.0
+    slot_length: float = 0.0
+    width: float = 0.0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> SlottedInletParams:
+        return cls(
+            location=get_int(elem, "Loc"),
+            depression=get_float(elem, "Dep"),
+            clogging=get_float(elem, "Clog"),
+            slot_length=get_float(elem, "SlotLength"),
+            width=get_float(elem, "Width"),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("H22SlottedIn")
+        set_int(elem, "Loc", self.location)
+        set_float(elem, "Dep", self.depression)
+        set_float(elem, "Clog", self.clogging)
+        set_float(elem, "SlotLength", self.slot_length)
+        set_float(elem, "Width", self.width)
+        return elem
+
+
+_HEC22_INLET_TAG = {0: "H22GrateIn", 1: "H22CurbIn", 2: "H22ComboIn", 3: "H22SlottedIn"}
+_HEC22_INLET_CLS = {
+    "H22GrateIn": GrateInletParams,
+    "H22CurbIn": CurbInletParams,
+    "H22ComboIn": ComboInletParams,
+    "H22SlottedIn": SlottedInletParams,
+}
+
+
+@dataclass
+class Hec22InletConfig:
+    """Full HEC-22 inlet capacity input configuration from HEC22InCapDet."""
+    hec22_inlet_type: int = 0
+    runoff: float = 0.0
+    rainfall_guid: str = ""
+    outflow_sf: float = 0.0
+    has_results: bool = False
+    gutter: Optional[GutterDetail] = None
+    grate: Optional[GrateInletParams] = None
+    curb: Optional[CurbInletParams] = None
+    combo: Optional[ComboInletParams] = None
+    slotted: Optional[SlottedInletParams] = None
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> Hec22InletConfig:
+        obj = cls(
+            hec22_inlet_type=get_int(elem, "HEC22InType"),
+            runoff=get_float(elem, "Runoff"),
+            rainfall_guid=get_str(elem, "RainfallGuid"),
+            outflow_sf=get_float(elem, "OutflowSF"),
+            has_results=get_bool(elem, "HasResults"),
+        )
+        gd = elem.find("GutterDet")
+        if gd is not None:
+            obj.gutter = GutterDetail.from_xml(gd)
+        for tag, parse_cls in _HEC22_INLET_CLS.items():
+            sub = elem.find(tag)
+            if sub is not None:
+                if tag == "H22GrateIn":
+                    obj.grate = parse_cls.from_xml(sub)
+                elif tag == "H22CurbIn":
+                    obj.curb = parse_cls.from_xml(sub)
+                elif tag == "H22ComboIn":
+                    obj.combo = parse_cls.from_xml(sub)
+                elif tag == "H22SlottedIn":
+                    obj.slotted = parse_cls.from_xml(sub)
+        return obj
+
+    def to_xml(self) -> Element:
+        elem = Element("HEC22InCapDet")
+        set_float(elem, "Runoff", self.runoff)
+        elem.set("RainfallGuid", self.rainfall_guid)
+        set_float(elem, "OutflowSF", self.outflow_sf)
+        set_int(elem, "HEC22InType", self.hec22_inlet_type)
+        set_bool(elem, "HasResults", self.has_results)
+        if self.gutter is not None:
+            elem.append(self.gutter.to_xml())
+        if self.grate is not None:
+            elem.append(self.grate.to_xml())
+        if self.curb is not None:
+            elem.append(self.curb.to_xml())
+        if self.combo is not None:
+            elem.append(self.combo.to_xml())
+        if self.slotted is not None:
+            elem.append(self.slotted.to_xml())
+        return elem
+
+    @property
+    def inlet_params(self):
+        """Return whichever inlet-type params object is set."""
+        return self.grate or self.curb or self.combo or self.slotted
+
+
+@dataclass
 class InletDetail:
     """An inlet on a junction or drainage system."""
     index: int = 0
@@ -472,7 +708,12 @@ class InletDetail:
     bypass_dest_guid: str = ""
     bypass_dest_label: str = ""
     sources: list[InletSource] = field(default_factory=list)
+    hec22_config: Optional[Hec22InletConfig] = None
     hec22_results: Optional[Hec22Results] = None
+
+    @property
+    def is_hec22(self) -> bool:
+        return self.capacity_type == 3
 
     @classmethod
     def from_xml(cls, elem: Element) -> InletDetail:
@@ -492,6 +733,11 @@ class InletDetail:
             bypass_guid = get_str(bc, "ftGUID")
             bypass_label = get_str(bc, "ToLabel")
 
+        hec22_config = None
+        hec_cap = elem.find("HEC22InCapDet")
+        if hec_cap is not None:
+            hec22_config = Hec22InletConfig.from_xml(hec_cap)
+
         hec22 = None
         hec_elem = elem.find("HEC22InletResults")
         if hec_elem is not None:
@@ -508,6 +754,7 @@ class InletDetail:
             bypass_dest_guid=bypass_guid,
             bypass_dest_label=bypass_label,
             sources=sources,
+            hec22_config=hec22_config,
             hec22_results=hec22,
         )
 
@@ -520,6 +767,9 @@ class InletDetail:
         set_int(ie, "ICapType", self.capacity_type)
         set_int(ie, "Dest", self.dest)
         ie.set("GUID", self.guid)
+
+        if self.hec22_config is not None:
+            ie.append(self.hec22_config.to_xml())
 
         bc = Element("BCGUID")
         if self.bypass_dest_guid:

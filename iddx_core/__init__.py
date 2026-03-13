@@ -5,8 +5,14 @@ from .phase import Phase
 from .nodes import (
     Catchment, Junction, DrainageSystem, OutletDetail, ToCDetails, SCSDetails,
     InletDetail, InletSource, Hec22Results,
+    Hec22InletConfig, GutterDetail,
+    GrateInletParams, CurbInletParams, ComboInletParams, SlottedInletParams,
 )
-from .connections import Connection, PipeConnection
+from .connections import (
+    Connection, PipeConnection,
+    CrossSectionDetails, CrossSectionPoint,
+    RationalResults, UpstreamTotals,
+)
 from .rainfall import RainfallSource, StormEvent, HyetographItem
 from .results import (
     ResultsReader, TimeSeries, NodeSummary, LinkSummary,
@@ -23,6 +29,9 @@ from .enums import (
     DrainageSystemType,
     IAType,
     ToCMethod,
+    Hec22InletType,
+    InletCapacityType,
+    InletLocation,
 )
 from .exceptions import (
     IddxError,
@@ -32,7 +41,7 @@ from .exceptions import (
     ElementNotFoundError,
 )
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 __all__ = [
     "IddxModel",
     "AuthorInfo",
@@ -46,6 +55,10 @@ __all__ = [
     "SCSDetails",
     "Connection",
     "PipeConnection",
+    "CrossSectionDetails",
+    "CrossSectionPoint",
+    "RationalResults",
+    "UpstreamTotals",
     "RainfallSource",
     "StormEvent",
     "HyetographItem",
@@ -67,6 +80,15 @@ __all__ = [
     "InletDetail",
     "InletSource",
     "Hec22Results",
+    "Hec22InletConfig",
+    "Hec22InletType",
+    "InletCapacityType",
+    "InletLocation",
+    "GutterDetail",
+    "GrateInletParams",
+    "CurbInletParams",
+    "ComboInletParams",
+    "SlottedInletParams",
     "DrainageSystemType",
     "IAType",
     "ToCMethod",

@@ -1,4 +1,4 @@
-"""Connection classes: Pipes, culverts, and channels."""
+"""Connection classes: Pipes, culverts, channels, and bypass connections."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -15,7 +15,113 @@ TAG_FOR_TYPE = {
     ConnectionType.CIRCULAR_PIPE: "PipeCon",
     ConnectionType.TRAPEZOIDAL_CHANNEL: "TrapChan",
     ConnectionType.TRIANGULAR_CHANNEL: "TriChan",
+    ConnectionType.CUSTOM_BYPASS: "CustomCon",
 }
+
+
+@dataclass
+class CrossSectionPoint:
+    """A single point in a custom cross-section profile."""
+    x: float = 0.0
+    y: float = 0.0
+
+
+@dataclass
+class CrossSectionDetails:
+    """Custom cross-section geometry for CustomCon bypass connections."""
+    con_covered: bool = False
+    diameter: float = 0.0
+    points: list[CrossSectionPoint] = field(default_factory=list)
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> CrossSectionDetails:
+        pts = []
+        coords = elem.find("Coords2DShort")
+        if coords is not None:
+            for c in coords.findall("Coordinate2DShort"):
+                pts.append(CrossSectionPoint(
+                    x=get_float(c, "XSh"),
+                    y=get_float(c, "YSh"),
+                ))
+        return cls(
+            con_covered=get_bool(elem, "ConCovered"),
+            diameter=get_float(elem, "Diam"),
+            points=pts,
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("CrsSctDetails")
+        set_bool(elem, "ConCovered", self.con_covered)
+        set_float(elem, "Diam", self.diameter)
+        coords = Element("Coords2DShort")
+        for i, pt in enumerate(self.points):
+            c = Element("Coordinate2DShort")
+            set_int(c, "Index", i)
+            set_float(c, "XSh", pt.x)
+            set_float(c, "YSh", pt.y)
+            coords.append(c)
+        elem.append(coords)
+        return elem
+
+
+@dataclass
+class RationalResults:
+    """Rational-method design results stored on a connection (read-only output)."""
+    path_guid: str = ""
+    rainfall_intensity: float = 0.0
+    time_of_concentration: float = 0.0
+    proportional_velocity: float = 0.0
+    proportional_depth: float = 0.0
+    velocity: float = 0.0
+    capacity: float = 0.0
+    flow: float = 0.0
+    cv: float = 0.0
+    cs: float = 0.0
+    capacity_limit: float = 0.0
+    velocity_at_one_third: float = 0.0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> RationalResults:
+        return cls(
+            path_guid=get_str(elem, "PathGUID"),
+            rainfall_intensity=get_float(elem, "RainfallIntensity"),
+            time_of_concentration=get_float(elem, "ToT"),
+            proportional_velocity=get_float(elem, "ProVel"),
+            proportional_depth=get_float(elem, "ProDep"),
+            velocity=get_float(elem, "Vel"),
+            capacity=get_float(elem, "Cap"),
+            flow=get_float(elem, "Flow"),
+            cv=get_float(elem, "Cv"),
+            cs=get_float(elem, "CS"),
+            capacity_limit=get_float(elem, "CapLimPipeCon"),
+            velocity_at_one_third=get_float(elem, "ProVelAtOneThirdFlow"),
+        )
+
+
+@dataclass
+class UpstreamTotals:
+    """Upstream accumulation totals stored on a connection (read-only output)."""
+    base_flow: float = 0.0
+    area: float = 0.0
+    contributing_area: float = 0.0
+    impervious_area: float = 0.0
+    total_discharge_units: float = 0.0
+    total_dwellings: float = 0.0
+    foul_flow_rate: float = 0.0
+    total_unit_flow: float = 0.0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> UpstreamTotals:
+        return cls(
+            base_flow=get_float(elem, "BaseFlow"),
+            area=get_float(elem, "Area"),
+            contributing_area=get_float(elem, "ContArea"),
+            impervious_area=get_float(elem, "PimpArea"),
+            total_discharge_units=get_float(elem, "TotalDisUnits"),
+            total_dwellings=get_float(elem, "TotalDwellings"),
+            foul_flow_rate=get_float(elem, "FoulResultingFlowRate"),
+            total_unit_flow=get_float(elem, "TotalUnitFlow"),
+        )
 
 
 @dataclass
@@ -44,11 +150,15 @@ class Connection:
     part_family: int = 0
     part_wall_thickness: float = 0.0
     part_material: str = ""
+    conduit_height_user: bool = False
     from_junction_guid: str = ""
     from_junction_label: str = ""
     to_junction_guid: str = ""
     to_junction_label: str = ""
     coords_3d: list[tuple[float, float, float]] = field(default_factory=list)
+    cross_section: Optional[CrossSectionDetails] = None
+    rational_results: Optional[RationalResults] = None
+    upstream_totals: Optional[UpstreamTotals] = None
     _element_tag: str = "PipeCon"
     _raw_element: Optional[Element] = field(default=None, repr=False)
 
@@ -66,6 +176,10 @@ class Connection:
             ConnectionType.TRAPEZOIDAL_CHANNEL,
             ConnectionType.TRIANGULAR_CHANNEL,
         )
+
+    @property
+    def is_bypass(self) -> bool:
+        return self.connection_type == ConnectionType.CUSTOM_BYPASS
 
     @property
     def calculated_slope(self) -> float:
@@ -102,6 +216,21 @@ class Connection:
                     get_float(c, "Z"),
                 ))
 
+        cross_section = None
+        crs_elem = elem.find("CrsSctDetails")
+        if crs_elem is not None:
+            cross_section = CrossSectionDetails.from_xml(crs_elem)
+
+        rat_res = None
+        rat_elem = elem.find("RatRes")
+        if rat_elem is not None:
+            rat_res = RationalResults.from_xml(rat_elem)
+
+        us_tot = None
+        us_elem = elem.find("USTot")
+        if us_elem is not None:
+            us_tot = UpstreamTotals.from_xml(us_elem)
+
         tag = elem.tag
         conn_type_int = get_int(elem, "Type", 2)
         if tag in ELEMENT_TO_CONNECTION_TYPE:
@@ -136,11 +265,15 @@ class Connection:
             part_family=get_int(elem, "PartFamily"),
             part_wall_thickness=get_float(elem, "PartWallThickness"),
             part_material=get_str(elem, "PartMaterial"),
+            conduit_height_user=get_bool(elem, "ConduitHeight_User"),
             from_junction_guid=from_guid,
             from_junction_label=from_label,
             to_junction_guid=to_guid,
             to_junction_label=to_label,
             coords_3d=coords_3d,
+            cross_section=cross_section,
+            rational_results=rat_res,
+            upstream_totals=us_tot,
             _element_tag=tag,
             _raw_element=elem,
         )
