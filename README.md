@@ -358,6 +358,15 @@ InfoDrainage-Python-Package/
 
 ## Changelog
 
+### 0.4.1
+
+- **Fixed**: Inlet edits now persist on save — `Junction.to_xml()` and `DrainageSystem.to_xml()` re-serialize inlets from Python objects instead of keeping stale raw XML
+- **Fixed**: `InletDetail` now reads and writes all XML fields: `Type`, `ICapType`, `Dest`, `BCGUID` (bypass destination)
+- Added `InletDetail.from_xml()` / `.to_xml()` methods for proper round-trip serialization
+- Added `Hec22Results` dataclass — reads HEC-22 inlet capacity results (approach flow, bypass flow, captured flow, spread, depth) from the XML
+- Added `InletDetail.capacity_type`, `.inlet_type`, `.bypass_dest_guid`, `.bypass_dest_label` properties
+- Exported `InletDetail`, `InletSource`, and `Hec22Results` from `iddx_core`
+
 ### 0.4.0
 
 - Added `pyproject.toml` — installable via `pip install .` with optional dependency groups

@@ -2,7 +2,10 @@
 
 from .model import IddxModel, AuthorInfo, UnitSettings
 from .phase import Phase
-from .nodes import Catchment, Junction, DrainageSystem, OutletDetail, ToCDetails, SCSDetails
+from .nodes import (
+    Catchment, Junction, DrainageSystem, OutletDetail, ToCDetails, SCSDetails,
+    InletDetail, InletSource, Hec22Results,
+)
 from .connections import Connection, PipeConnection
 from .rainfall import RainfallSource, StormEvent, HyetographItem
 from .results import (
@@ -29,7 +32,7 @@ from .exceptions import (
     ElementNotFoundError,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 __all__ = [
     "IddxModel",
     "AuthorInfo",
@@ -61,6 +64,9 @@ __all__ = [
     "ConnectionType",
     "OutletType",
     "PhaseType",
+    "InletDetail",
+    "InletSource",
+    "Hec22Results",
     "DrainageSystemType",
     "IAType",
     "ToCMethod",

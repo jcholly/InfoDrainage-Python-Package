@@ -419,13 +419,127 @@ class InletSource:
 
 
 @dataclass
+class Hec22Results:
+    """HEC-22 inlet capacity results computed by InfoDrainage."""
+    approach_flow: float = 0.0
+    bypass_flow: float = 0.0
+    captured_flow: float = 0.0
+    spread_bypass: float = 0.0
+    spread_gutter: float = 0.0
+    depth_bypass: float = 0.0
+    depth_gutter: float = 0.0
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> Hec22Results:
+        return cls(
+            approach_flow=get_float(elem, "Hec22ApproachFlow"),
+            bypass_flow=get_float(elem, "Hec22BypassFlow"),
+            captured_flow=get_float(elem, "Hec22CapturedFlow"),
+            spread_bypass=get_float(elem, "Hec22SpreadBypass"),
+            spread_gutter=get_float(elem, "Hec22SpreadGutter"),
+            depth_bypass=get_float(elem, "Hec22DepthBypass"),
+            depth_gutter=get_float(elem, "Hec22DepthGutter"),
+        )
+
+    def to_xml(self) -> Element:
+        elem = Element("HEC22InletResults")
+        set_float(elem, "Hec22ApproachFlow", self.approach_flow)
+        set_float(elem, "Hec22BypassFlow", self.bypass_flow)
+        set_float(elem, "Hec22CapturedFlow", self.captured_flow)
+        set_float(elem, "Hec22SpreadBypass", self.spread_bypass)
+        set_float(elem, "Hec22SpreadGutter", self.spread_gutter)
+        set_float(elem, "Hec22DepthBypass", self.depth_bypass)
+        set_float(elem, "Hec22DepthGutter", self.depth_gutter)
+        return elem
+
+    @property
+    def efficiency(self) -> float:
+        if self.approach_flow <= 0:
+            return 0.0
+        return self.captured_flow / self.approach_flow
+
+
+@dataclass
 class InletDetail:
-    """An inlet on a junction."""
+    """An inlet on a junction or drainage system."""
     index: int = 0
     label: str = "Inlet"
     guid: str = field(default_factory=new_guid)
     parent_guid: str = ""
+    inlet_type: int = 0
+    capacity_type: int = 0
+    dest: int = 0
+    bypass_dest_guid: str = ""
+    bypass_dest_label: str = ""
     sources: list[InletSource] = field(default_factory=list)
+    hec22_results: Optional[Hec22Results] = None
+
+    @classmethod
+    def from_xml(cls, elem: Element) -> InletDetail:
+        sources = []
+        guids_elem = elem.find("GUIDS")
+        if guids_elem is not None:
+            for fs in guids_elem.findall("FromSource"):
+                sources.append(InletSource(
+                    guid=get_str(fs, "ftGUID"),
+                    label=get_str(fs, "FromLabel"),
+                ))
+
+        bypass_guid = ""
+        bypass_label = ""
+        bc = elem.find("BCGUID")
+        if bc is not None:
+            bypass_guid = get_str(bc, "ftGUID")
+            bypass_label = get_str(bc, "ToLabel")
+
+        hec22 = None
+        hec_elem = elem.find("HEC22InletResults")
+        if hec_elem is not None:
+            hec22 = Hec22Results.from_xml(hec_elem)
+
+        return cls(
+            index=get_int(elem, "Index"),
+            label=get_str(elem, "Label", "Inlet"),
+            guid=get_str(elem, "GUID", new_guid()),
+            parent_guid=get_str(elem, "ftGUID"),
+            inlet_type=get_int(elem, "Type"),
+            capacity_type=get_int(elem, "ICapType"),
+            dest=get_int(elem, "Dest"),
+            bypass_dest_guid=bypass_guid,
+            bypass_dest_label=bypass_label,
+            sources=sources,
+            hec22_results=hec22,
+        )
+
+    def to_xml(self) -> Element:
+        ie = Element("IDetail")
+        set_int(ie, "Index", self.index)
+        ie.set("Label", self.label)
+        ie.set("ftGUID", self.parent_guid)
+        set_int(ie, "Type", self.inlet_type)
+        set_int(ie, "ICapType", self.capacity_type)
+        set_int(ie, "Dest", self.dest)
+        ie.set("GUID", self.guid)
+
+        bc = Element("BCGUID")
+        if self.bypass_dest_guid:
+            bc.set("ftGUID", self.bypass_dest_guid)
+        bc.set("ToLabel", self.bypass_dest_label)
+        ie.append(bc)
+
+        guids_elem = Element("GUIDS")
+        for si, src in enumerate(self.sources):
+            fs = Element("FromSource")
+            set_int(fs, "Index", si)
+            fs.set("ftGUID", src.guid)
+            fs.set("FromLabel", src.label)
+            guids_elem.append(fs)
+        ie.append(guids_elem)
+
+        hec = self.hec22_results or Hec22Results()
+        ie.append(hec.to_xml())
+
+        return ie
 
 
 @dataclass
@@ -607,21 +721,7 @@ class Junction:
         inlet_dets = elem.find("InletDetails")
         if inlet_dets is not None:
             for idet in inlet_dets.findall("IDetail"):
-                sources = []
-                guids_elem = idet.find("GUIDS")
-                if guids_elem is not None:
-                    for fs in guids_elem.findall("FromSource"):
-                        sources.append(InletSource(
-                            guid=get_str(fs, "ftGUID"),
-                            label=get_str(fs, "FromLabel"),
-                        ))
-                inlets.append(InletDetail(
-                    index=get_int(idet, "Index"),
-                    label=get_str(idet, "Label", "Inlet"),
-                    guid=get_str(idet, "GUID", new_guid()),
-                    parent_guid=get_str(idet, "ftGUID"),
-                    sources=sources,
-                ))
+                inlets.append(InletDetail.from_xml(idet))
 
         outlets = []
         outlet_dets = elem.find("OutletDetails")
@@ -674,6 +774,19 @@ class Junction:
             set_bool(elem, "Sealed", self.sealed)
             set_float(elem, "BendLoss", self.bend_loss)
             set_int(elem, "PartFamily", self.part_family)
+
+            # Re-serialize inlets from Python objects
+            old_inlet_dets = elem.find("InletDetails")
+            if old_inlet_dets is not None:
+                inlet_idx = list(elem).index(old_inlet_dets)
+                elem.remove(old_inlet_dets)
+            else:
+                inlet_idx = len(list(elem))
+            inlet_dets_elem = Element("InletDetails")
+            for idet in self.inlets:
+                idet.parent_guid = idet.parent_guid or self.guid
+                inlet_dets_elem.append(idet.to_xml())
+            elem.insert(inlet_idx, inlet_dets_elem)
 
             outlet_dets = elem.find("OutletDetails")
             if outlet_dets is not None:
@@ -735,32 +848,8 @@ class Junction:
 
         inlet_dets_elem = Element("InletDetails")
         for idet in self.inlets:
-            ie = Element("IDetail")
-            set_int(ie, "Index", idet.index)
-            ie.set("Label", idet.label)
-            ie.set("ftGUID", idet.parent_guid or self.guid)
-            set_int(ie, "Type", 0)
-            set_int(ie, "ICapType", 0)
-            set_int(ie, "Dest", 0)
-            ie.set("GUID", idet.guid)
-            bc = Element("BCGUID")
-            bc.set("ToLabel", "")
-            ie.append(bc)
-            guids_elem = Element("GUIDS")
-            for si, src in enumerate(idet.sources):
-                fs = Element("FromSource")
-                set_int(fs, "Index", si)
-                fs.set("ftGUID", src.guid)
-                fs.set("FromLabel", src.label)
-                guids_elem.append(fs)
-            ie.append(guids_elem)
-            hec = Element("HEC22InletResults")
-            for a in ("Hec22ApproachFlow", "Hec22BypassFlow", "Hec22CapturedFlow",
-                       "Hec22SpreadBypass", "Hec22SpreadGutter",
-                       "Hec22DepthBypass", "Hec22DepthGutter"):
-                set_float(hec, a, 0)
-            ie.append(hec)
-            inlet_dets_elem.append(ie)
+            idet.parent_guid = idet.parent_guid or self.guid
+            inlet_dets_elem.append(idet.to_xml())
         elem.append(inlet_dets_elem)
 
         outlet_dets_elem = Element("OutletDetails")
@@ -881,21 +970,7 @@ class DrainageSystem:
         inlet_dets = elem.find("InletDetails")
         if inlet_dets is not None:
             for idet in inlet_dets.findall("IDetail"):
-                sources = []
-                guids_elem = idet.find("GUIDS")
-                if guids_elem is not None:
-                    for fs in guids_elem.findall("FromSource"):
-                        sources.append(InletSource(
-                            guid=get_str(fs, "ftGUID"),
-                            label=get_str(fs, "FromLabel"),
-                        ))
-                inlets.append(InletDetail(
-                    index=get_int(idet, "Index"),
-                    label=get_str(idet, "Label", "Inlet"),
-                    guid=get_str(idet, "GUID", new_guid()),
-                    parent_guid=get_str(idet, "ftGUID"),
-                    sources=sources,
-                ))
+                inlets.append(InletDetail.from_xml(idet))
 
         outlets = []
         outlet_dets = elem.find("OutletDetails")
@@ -982,6 +1057,19 @@ class DrainageSystem:
             set_float(elem, "IniDep", self.initial_depth)
             set_float(elem, "Freeboard", self.freeboard)
 
+            # Re-serialize inlets from Python objects
+            old_inlet_dets = elem.find("InletDetails")
+            if old_inlet_dets is not None:
+                inlet_idx = list(elem).index(old_inlet_dets)
+                elem.remove(old_inlet_dets)
+            else:
+                inlet_idx = len(list(elem))
+            inlet_dets_elem = Element("InletDetails")
+            for idet in self.inlets:
+                idet.parent_guid = idet.parent_guid or self.guid
+                inlet_dets_elem.append(idet.to_xml())
+            elem.insert(inlet_idx, inlet_dets_elem)
+
             outlet_dets = elem.find("OutletDetails")
             if outlet_dets is not None:
                 for odet_elem in outlet_dets.findall("ODetail"):
@@ -1055,26 +1143,8 @@ class DrainageSystem:
 
         inlet_dets_elem = Element("InletDetails")
         for idet in self.inlets:
-            ie = Element("IDetail")
-            set_int(ie, "Index", idet.index)
-            ie.set("Label", idet.label)
-            ie.set("ftGUID", idet.parent_guid or self.guid)
-            set_int(ie, "Type", 0)
-            set_int(ie, "ICapType", 0)
-            set_int(ie, "Dest", 0)
-            ie.set("GUID", idet.guid)
-            bc = Element("BCGUID")
-            bc.set("ToLabel", "")
-            ie.append(bc)
-            guids_elem = Element("GUIDS")
-            for si, src in enumerate(idet.sources):
-                fs = Element("FromSource")
-                set_int(fs, "Index", si)
-                fs.set("ftGUID", src.guid)
-                fs.set("FromLabel", src.label)
-                guids_elem.append(fs)
-            ie.append(guids_elem)
-            inlet_dets_elem.append(ie)
+            idet.parent_guid = idet.parent_guid or self.guid
+            inlet_dets_elem.append(idet.to_xml())
         elem.append(inlet_dets_elem)
 
         outlet_dets_elem = Element("OutletDetails")
