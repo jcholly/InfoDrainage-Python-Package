@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iddx-core"
+version = "0.4.0"
+description = "Pure-Python toolkit for reading, writing, and automating Autodesk InfoDrainage .iddx project files and SWMM results."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Autodesk Water Solutions Engineering"},
+]
+keywords = [
+    "infodrainage", "drainage", "stormwater", "swmm",
+    "hydraulics", "hydrology", "iddx", "autodesk",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Hydrology",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.optional-dependencies]
+plotting = ["matplotlib>=3.7"]
+simulation = ["pyswmm>=2.0"]
+network = ["networkx>=3.0"]
+all = ["matplotlib>=3.7", "pyswmm>=2.0", "networkx>=3.0"]
+
+[project.scripts]
+iddx = "iddx_core.cli:main"
+
+[project.urls]
+Repository = "https://github.com/jcholly/InfoDrainage-Python-Package"
+
+[tool.setuptools.packages.find]
+include = ["iddx_core*"]

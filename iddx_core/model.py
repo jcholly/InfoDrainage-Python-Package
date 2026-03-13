@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import copy
+import logging
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 from dataclasses import dataclass, field
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from .enums import ELEMENT_TO_DSYS_TYPE
+from .exceptions import IddxParseError, ElementNotFoundError
 from .phase import Phase
 from .rainfall import RainfallSource
 from .nodes import Catchment, Junction, DrainageSystem
@@ -17,6 +19,8 @@ from .utils import (
     get_int, get_bool, get_str, get_float, set_int, set_bool, set_float,
     new_guid, make_ver_guid, find_or_create,
 )
+
+logger = logging.getLogger("iddx_core.model")
 
 
 RAINFALL_SOURCE_TAGS = ("NOAA", "FEH", "FSR", "CustomRain")
@@ -69,8 +73,14 @@ class IddxModel:
     def open(cls, filepath: str | Path) -> IddxModel:
         """Open and parse an existing .iddx file."""
         filepath = Path(filepath)
-        tree = ET.parse(filepath)
+        if not filepath.exists():
+            raise IddxParseError("File not found", filepath=str(filepath))
+        try:
+            tree = ET.parse(filepath)
+        except ET.ParseError as exc:
+            raise IddxParseError(f"Invalid XML: {exc}", filepath=str(filepath)) from exc
         root = tree.getroot()
+        logger.info("Opened %s", filepath.name)
 
         author_elem = root.find("Author")
         author = AuthorInfo()
@@ -262,7 +272,7 @@ class IddxModel:
     def clone_phase(self, source_label: str, new_label: str) -> Phase:
         source = self.phases.get(source_label)
         if source is None:
-            raise KeyError(f"Phase '{source_label}' not found")
+            raise ElementNotFoundError("Phase", source_label)
         new_phase = source.clone(new_label)
         new_phase.index = len(self.phases)
         self.phases[new_label] = new_phase
@@ -314,6 +324,7 @@ class IddxModel:
         tree.write(str(out_path), encoding="unicode", xml_declaration=False)
 
         self.filepath = out_path
+        logger.info("Saved %s (%d phases)", out_path.name, len(self.phases))
         return out_path
 
     def _build_xml(self) -> Element:

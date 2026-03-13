@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from .exceptions import ResultsError, ElementNotFoundError
+
+logger = logging.getLogger("iddx_core.results")
 
 SWMM_MAGIC = 516114522
 
@@ -143,7 +148,7 @@ class ResultsReader:
     def __init__(self, filepath: str | Path):
         self._path = Path(filepath)
         if not self._path.exists():
-            raise FileNotFoundError(f"Results file not found: {self._path}")
+            raise ResultsError("Results file not found", filepath=str(self._path))
 
         with open(self._path, "rb") as f:
             self._data = f.read()
@@ -159,7 +164,7 @@ class ResultsReader:
     def _parse_header(self):
         magic = struct.unpack_from("<i", self._data, 0)[0]
         if magic != SWMM_MAGIC:
-            raise ValueError(f"Not a SWMM output file (magic={magic})")
+            raise ResultsError(f"Not a SWMM output file (magic={magic})", filepath=str(self._path))
 
         (
             self._version,
@@ -183,11 +188,11 @@ class ResultsReader:
         ) = struct.unpack_from("<6i", self._data, len(self._data) - 24)
 
         if magic2 != SWMM_MAGIC:
-            raise ValueError("Corrupted results file (bad trailing magic)")
+            raise ResultsError("Corrupted results file (bad trailing magic)", filepath=str(self._path))
         if self._error_code != 0:
-            raise ValueError(f"Simulation error code: {self._error_code}")
+            raise ResultsError(f"Simulation error code: {self._error_code}", filepath=str(self._path))
         if self._n_periods == 0:
-            raise ValueError("No reporting periods in results file")
+            raise ResultsError("No reporting periods in results file", filepath=str(self._path))
 
     def _read_string(self, offset: int) -> tuple[str, int]:
         slen = struct.unpack_from("<i", self._data, offset)[0]
@@ -298,8 +303,9 @@ class ResultsReader:
     def _validate(self):
         expected_size = self._results_start + self._n_periods * self._bytes_per_period + 24
         if expected_size != len(self._data):
-            raise ValueError(
-                f"File size mismatch: expected {expected_size}, got {len(self._data)}"
+            raise ResultsError(
+                f"File size mismatch: expected {expected_size}, got {len(self._data)}",
+                filepath=str(self._path),
             )
 
     def _period_time(self, period: int) -> datetime.datetime:
@@ -415,7 +421,7 @@ class ResultsReader:
         try:
             node_idx = self._node_ids.index(node_id)
         except ValueError:
-            raise KeyError(f"Node '{node_id}' not found in results")
+            raise ElementNotFoundError("Node", node_id)
 
         var_names = self.node_variables
         if variable not in var_names:
@@ -449,7 +455,7 @@ class ResultsReader:
         try:
             link_idx = self._link_ids.index(link_id)
         except ValueError:
-            raise KeyError(f"Link '{link_id}' not found in results")
+            raise ElementNotFoundError("Link", link_id)
 
         var_names = self.link_variables
         if variable not in var_names:
@@ -477,7 +483,7 @@ class ResultsReader:
         try:
             idx = self._node_ids.index(node_id)
         except ValueError:
-            raise KeyError(f"Node '{node_id}' not found in results")
+            raise ElementNotFoundError("Node", node_id)
 
         prop_codes = self._node_prop_codes
         props = self._node_props[idx]
@@ -528,7 +534,7 @@ class ResultsReader:
         try:
             idx = self._link_ids.index(link_id)
         except ValueError:
-            raise KeyError(f"Link '{link_id}' not found in results")
+            raise ElementNotFoundError("Link", link_id)
 
         prop_codes = self._link_prop_codes
         props = self._link_props[idx]

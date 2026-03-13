@@ -21,8 +21,15 @@ from .enums import (
     IAType,
     ToCMethod,
 )
+from .exceptions import (
+    IddxError,
+    IddxParseError,
+    IddxValidationError,
+    ResultsError,
+    ElementNotFoundError,
+)
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = [
     "IddxModel",
     "AuthorInfo",
@@ -57,4 +64,9 @@ __all__ = [
     "DrainageSystemType",
     "IAType",
     "ToCMethod",
+    "IddxError",
+    "IddxParseError",
+    "IddxValidationError",
+    "ResultsError",
+    "ElementNotFoundError",
 ]
