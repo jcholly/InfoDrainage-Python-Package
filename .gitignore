@@ -11,9 +11,6 @@ __pycache__/
 dist/
 build/
 
-# Tools (separate from the core package)
-tools/
-
 # Output files
 *.csv
 
