@@ -5,32 +5,57 @@ from dataclasses import dataclass, field
 from xml.etree.ElementTree import Element
 from typing import Optional
 
+from enum import IntEnum
+
 from .enums import (
-    RunoffMethod, JunctionType, JunctionShape, OutletType,
-    DrainageSystemType, ELEMENT_TO_DSYS_TYPE, DRAINAGE_SYSTEM_ELEMENTS,
-    ALL_DSYS_TAGS, IAType, ToCMethod,
+    RunoffMethod,
+    JunctionType,
+    JunctionShape,
+    OutletType,
+    DrainageSystemType,
+    ELEMENT_TO_DSYS_TYPE,
+    DRAINAGE_SYSTEM_ELEMENTS,
+    Hec22InletType,
+    InletCapacityType,
 )
 from .utils import (
-    get_float, get_int, get_bool, get_str, set_float, set_int, set_bool,
-    new_guid, parse_coordinate_2d, make_coordinate_2d,
-    parse_polygon, make_polygon_element, find_or_create,
+    RawXmlBacked,
+    get_float,
+    get_int,
+    get_bool,
+    get_str,
+    set_float,
+    set_int,
+    set_bool,
+    new_guid,
+    parse_coordinate_2d,
+    make_coordinate_2d,
+    parse_polygon,
+    make_polygon_element,
 )
+
+
+def _safe_enum(enum_cls: type[IntEnum], value: int, default: IntEnum) -> IntEnum:
+    """Coerce an int from XML into an enum, falling back to default for unknown values."""
+    try:
+        return enum_cls(value)
+    except ValueError:
+        return default
 
 
 def _safe_runoff_method(value: int) -> RunoffMethod:
-    try:
-        return RunoffMethod(value)
-    except ValueError:
-        return RunoffMethod.RATIONAL
+    return _safe_enum(RunoffMethod, value, RunoffMethod.RATIONAL)
 
 
 # ---------------------------------------------------------------------------
 # Catchment (AreaInflowNode)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ToCDetails:
     """Time of Concentration calculation parameters."""
+
     area: float = 0.0
     slope: float = 0.0
     length: float = 0.0
@@ -41,6 +66,15 @@ class ToCDetails:
     toc_method: int = 0
     toc_flag_calc: bool = False
     roughness: float = 0.0
+
+    @property
+    def percent_impervious(self) -> int:
+        """Percent impervious (synonym for ``pimp``)."""
+        return self.pimp
+
+    @percent_impervious.setter
+    def percent_impervious(self, value: int) -> None:
+        self.pimp = value
 
     @classmethod
     def from_xml(cls, elem: Element) -> ToCDetails:
@@ -78,7 +112,11 @@ class ToCDetails:
         set_float(toc, "Area", self.area if self.toc_flag_calc else 0.0)
         set_float(toc, "Slope", self.slope if self.toc_flag_calc else 0.0)
         set_float(toc, "Length", self.length if self.toc_flag_calc else 0.0)
-        set_float(toc, "RunoffCoefficient", self.runoff_coefficient if self.toc_flag_calc else 0.0)
+        set_float(
+            toc,
+            "RunoffCoefficient",
+            self.runoff_coefficient if self.toc_flag_calc else 0.0,
+        )
         friend = Element("FriendEquationToCDetails")
         set_float(friend, "Roughness", self.roughness)
         set_float(friend, "Length", self.length if self.toc_flag_calc else 0.0)
@@ -91,6 +129,7 @@ class ToCDetails:
 @dataclass
 class SCSDetails:
     """SCS Curve Number method parameters."""
+
     area: float = 0.0
     slope: float = 0.0
     length: float = 0.0
@@ -114,6 +153,15 @@ class SCSDetails:
     cn_cover_type: int = 0
     cn_condition: int = 0
     cn_soil_group: int = 0
+
+    @property
+    def percent_impervious(self) -> int:
+        """Percent impervious (synonym for ``pimp``)."""
+        return self.pimp
+
+    @percent_impervious.setter
+    def percent_impervious(self, value: int) -> None:
+        self.pimp = value
 
     @classmethod
     def from_xml(cls, elem: Element) -> SCSDetails:
@@ -175,7 +223,11 @@ class SCSDetails:
         set_float(toc, "Area", self.area if self.toc_flag_calc else 0.0)
         set_float(toc, "Slope", self.slope if self.toc_flag_calc else 0.0)
         set_float(toc, "Length", self.length if self.toc_flag_calc else 0.0)
-        set_float(toc, "RunoffCoefficient", self.runoff_coefficient if self.toc_flag_calc else 0.0)
+        set_float(
+            toc,
+            "RunoffCoefficient",
+            self.runoff_coefficient if self.toc_flag_calc else 0.0,
+        )
         friend = Element("FriendEquationToCDetails")
         set_float(friend, "Roughness", self.roughness)
         set_float(friend, "Length", self.length if self.toc_flag_calc else 0.0)
@@ -192,9 +244,10 @@ class SCSDetails:
         return elem
 
 
-@dataclass
-class Catchment:
+@dataclass(kw_only=True)
+class Catchment(RawXmlBacked):
     """Represents an AreaInflowNode (catchment/inflow area)."""
+
     index: int = 0
     label: str = ""
     guid: str = field(default_factory=new_guid)
@@ -217,7 +270,9 @@ class Catchment:
     boundary: list[tuple[float, float]] = field(default_factory=list)
     toc_details: Optional[ToCDetails] = None
     scs_details: Optional[SCSDetails] = None
-    _raw_element: Optional[Element] = field(default=None, repr=False)
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @property
     def area_acres(self) -> float:
@@ -226,6 +281,24 @@ class Catchment:
     @property
     def area_sq_ft(self) -> float:
         return self.area * 27_878_400.0
+
+    @property
+    def runoff_coefficient(self) -> float:
+        """Runoff coefficient (synonym for ``cv``)."""
+        return self.cv
+
+    @runoff_coefficient.setter
+    def runoff_coefficient(self, value: float) -> None:
+        self.cv = value
+
+    @property
+    def percent_impervious(self) -> int:
+        """Percent impervious area, 0–100 (synonym for ``pimp``)."""
+        return self.pimp
+
+    @percent_impervious.setter
+    def percent_impervious(self, value: int) -> None:
+        self.pimp = value
 
     @classmethod
     def from_xml(cls, elem: Element) -> Catchment:
@@ -249,11 +322,12 @@ class Catchment:
         if scs_elem is not None:
             scs_det = SCSDetails.from_xml(scs_elem)
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             label=get_str(elem, "Label"),
             guid=get_str(elem, "GUID", new_guid()),
-            x=x, y=y,
+            x=x,
+            y=y,
             cv=get_float(elem, "CV", 0.75),
             cv_user=get_bool(elem, "CV_User"),
             cvps=get_float(elem, "CVPS", 0.75),
@@ -271,15 +345,15 @@ class Catchment:
             boundary=boundary,
             toc_details=toc_det,
             scs_details=scs_det,
-            _raw_element=elem,
         )
+        obj._raw_element = elem
+        return obj
 
     def to_xml(self, index: Optional[int] = None) -> Element:
-        import copy as _copy
         idx = index if index is not None else self.index
 
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", idx)
             elem.set("Label", self.label)
             elem.set("GUID", self.guid)
@@ -351,12 +425,28 @@ class Catchment:
         set_bool(tank, "Used", False)
         det = Element("Det")
         set_bool(det, "Used", False)
-        for a in ("Volume", "Height", "Width", "Length", "InitPerc", "TankType", "OutflowSF"):
+        for a in (
+            "Volume",
+            "Height",
+            "Width",
+            "Length",
+            "InitPerc",
+            "TankType",
+            "OutflowSF",
+        ):
             set_int(det, a, 0)
         tank.append(det)
         ret = Element("Ret")
         set_bool(ret, "Used", False)
-        for a in ("Volume", "Height", "Width", "Length", "InitPerc", "TankType", "OutflowMF"):
+        for a in (
+            "Volume",
+            "Height",
+            "Width",
+            "Length",
+            "InitPerc",
+            "TankType",
+            "OutflowMF",
+        ):
             set_int(ret, a, 0)
         tank.append(ret)
         elem.append(tank)
@@ -373,7 +463,9 @@ class Catchment:
             elem.append(self.toc_details.to_xml())
         else:
             toc = ToCDetails(
-                area=self.area, tc=self.tcps, pimp=self.pimp,
+                area=self.area,
+                tc=self.tcps,
+                pimp=self.pimp,
                 runoff_coefficient=self.cv,
             )
             elem.append(toc.to_xml())
@@ -411,9 +503,11 @@ class Catchment:
 # Junction
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class InletSource:
     """A source feeding into a junction inlet."""
+
     guid: str = ""
     label: str = ""
 
@@ -421,6 +515,7 @@ class InletSource:
 @dataclass
 class Hec22Results:
     """HEC-22 inlet capacity results computed by InfoDrainage."""
+
     approach_flow: float = 0.0
     bypass_flow: float = 0.0
     captured_flow: float = 0.0
@@ -462,6 +557,7 @@ class Hec22Results:
 @dataclass
 class GutterDetail:
     """Gutter cross-section parameters for HEC-22 calculations."""
+
     slope: float = 0.0
     road_x_slope: float = 0.0
     gutter_x_slope: float = 0.0
@@ -491,6 +587,7 @@ class GutterDetail:
 @dataclass
 class GrateInletParams:
     """HEC-22 grate inlet sizing parameters."""
+
     location: int = 0
     depression: float = 0.0
     clogging: float = 0.0
@@ -523,6 +620,7 @@ class GrateInletParams:
 @dataclass
 class CurbInletParams:
     """HEC-22 curb-opening inlet sizing parameters."""
+
     location: int = 0
     depression: float = 0.0
     clogging: float = 0.0
@@ -555,6 +653,7 @@ class CurbInletParams:
 @dataclass
 class ComboInletParams:
     """HEC-22 combination (grate + curb) inlet sizing parameters."""
+
     location: int = 0
     depression: float = 0.0
     clogging: float = 0.0
@@ -596,6 +695,7 @@ class ComboInletParams:
 @dataclass
 class SlottedInletParams:
     """HEC-22 slotted drain inlet sizing parameters."""
+
     location: int = 0
     depression: float = 0.0
     clogging: float = 0.0
@@ -631,10 +731,11 @@ _HEC22_INLET_CLS = {
 }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Hec22InletConfig:
     """Full HEC-22 inlet capacity input configuration from HEC22InCapDet."""
-    hec22_inlet_type: int = 0
+
+    hec22_inlet_type: Hec22InletType = Hec22InletType.GRATE
     runoff: float = 0.0
     rainfall_guid: str = ""
     outflow_sf: float = 0.0
@@ -648,7 +749,9 @@ class Hec22InletConfig:
     @classmethod
     def from_xml(cls, elem: Element) -> Hec22InletConfig:
         obj = cls(
-            hec22_inlet_type=get_int(elem, "HEC22InType"),
+            hec22_inlet_type=_safe_enum(
+                Hec22InletType, get_int(elem, "HEC22InType"), Hec22InletType.GRATE
+            ),
             runoff=get_float(elem, "Runoff"),
             rainfall_guid=get_str(elem, "RainfallGuid"),
             outflow_sf=get_float(elem, "OutflowSF"),
@@ -695,15 +798,16 @@ class Hec22InletConfig:
         return self.grate or self.curb or self.combo or self.slotted
 
 
-@dataclass
+@dataclass(kw_only=True)
 class InletDetail:
     """An inlet on a junction or drainage system."""
+
     index: int = 0
     label: str = "Inlet"
     guid: str = field(default_factory=new_guid)
     parent_guid: str = ""
-    inlet_type: int = 0
-    capacity_type: int = 0
+    inlet_type: Hec22InletType = Hec22InletType.GRATE
+    capacity_type: InletCapacityType = InletCapacityType.NONE
     dest: int = 0
     bypass_dest_guid: str = ""
     bypass_dest_label: str = ""
@@ -713,7 +817,7 @@ class InletDetail:
 
     @property
     def is_hec22(self) -> bool:
-        return self.capacity_type == 3
+        return self.capacity_type == InletCapacityType.HEC_22
 
     @classmethod
     def from_xml(cls, elem: Element) -> InletDetail:
@@ -721,10 +825,12 @@ class InletDetail:
         guids_elem = elem.find("GUIDS")
         if guids_elem is not None:
             for fs in guids_elem.findall("FromSource"):
-                sources.append(InletSource(
-                    guid=get_str(fs, "ftGUID"),
-                    label=get_str(fs, "FromLabel"),
-                ))
+                sources.append(
+                    InletSource(
+                        guid=get_str(fs, "ftGUID"),
+                        label=get_str(fs, "FromLabel"),
+                    )
+                )
 
         bypass_guid = ""
         bypass_label = ""
@@ -748,8 +854,12 @@ class InletDetail:
             label=get_str(elem, "Label", "Inlet"),
             guid=get_str(elem, "GUID", new_guid()),
             parent_guid=get_str(elem, "ftGUID"),
-            inlet_type=get_int(elem, "Type"),
-            capacity_type=get_int(elem, "ICapType"),
+            inlet_type=_safe_enum(
+                Hec22InletType, get_int(elem, "Type"), Hec22InletType.GRATE
+            ),
+            capacity_type=_safe_enum(
+                InletCapacityType, get_int(elem, "ICapType"), InletCapacityType.NONE
+            ),
             dest=get_int(elem, "Dest"),
             bypass_dest_guid=bypass_guid,
             bypass_dest_label=bypass_label,
@@ -792,9 +902,10 @@ class InletDetail:
         return ie
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OutletDetail:
     """An outlet on a junction or drainage system."""
+
     index: int = 0
     label: str = "Outlet"
     guid: str = field(default_factory=new_guid)
@@ -868,11 +979,15 @@ class OutletDetail:
                     ori = fcs.find("CtrlOrifice")
                     if ori is not None:
                         obj.orifice_diameter = get_float(ori, "DiamDepth")
-                        obj.orifice_cdo = get_float(ori, "CDO", get_float(ori, "CD", 0.6))
+                        obj.orifice_cdo = get_float(
+                            ori, "CDO", get_float(ori, "CD", 0.6)
+                        )
                     weir = fcs.find("CtrlWeir")
                     if weir is not None:
                         obj.weir_width = get_float(weir, "Width")
-                        obj.weir_cdw = get_float(weir, "CDW", get_float(weir, "CD", 0.544))
+                        obj.weir_cdw = get_float(
+                            weir, "CDW", get_float(weir, "CD", 0.544)
+                        )
         elif otype == OutletType.PUMP:
             pump = elem.find("CtrlPump")
             if pump is not None:
@@ -937,9 +1052,10 @@ class OutletDetail:
         return elem
 
 
-@dataclass
-class Junction:
+@dataclass(kw_only=True)
+class Junction(RawXmlBacked):
     """Represents a junction node (manhole, inlet structure, outfall)."""
+
     index: int = 0
     label: str = ""
     guid: str = field(default_factory=new_guid)
@@ -960,7 +1076,9 @@ class Junction:
     bend_loss: float = 0.0
     inlets: list[InletDetail] = field(default_factory=list)
     outlets: list[OutletDetail] = field(default_factory=list)
-    _raw_element: Optional[Element] = field(default=None, repr=False)
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @classmethod
     def from_xml(cls, elem: Element) -> Junction:
@@ -979,11 +1097,12 @@ class Junction:
             for odet in outlet_dets.findall("ODetail"):
                 outlets.append(OutletDetail.from_xml(odet))
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             label=get_str(elem, "Label"),
             guid=get_str(elem, "GUID", new_guid()),
-            x=x, y=y,
+            x=x,
+            y=y,
             is_outfall=get_bool(elem, "IsOut"),
             junction_type=JunctionType(get_int(elem, "Type", 1)),
             shape=JunctionShape(get_int(elem, "Shape", 0)),
@@ -999,15 +1118,15 @@ class Junction:
             bend_loss=get_float(elem, "BendLoss"),
             inlets=inlets,
             outlets=outlets,
-            _raw_element=elem,
         )
+        obj._raw_element = elem
+        return obj
 
     def to_xml(self, index: Optional[int] = None) -> Element:
-        import copy as _copy
         idx = index if index is not None else self.index
 
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", idx)
             elem.set("Label", self.label)
             elem.set("GUID", self.guid)
@@ -1126,17 +1245,20 @@ class Junction:
 # DrainageSystem (Pond, Tank, Swale, etc.)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DepthAreaVolume:
     """A single row in a depth-area-volume table."""
+
     depth: float = 0.0
     area: float = 0.0
     volume: float = 0.0
 
 
-@dataclass
-class DrainageSystem:
+@dataclass(kw_only=True)
+class DrainageSystem(RawXmlBacked):
     """Represents a stormwater control (pond, tank, swale, bioretention, etc.)."""
+
     index: int = 0
     label: str = ""
     guid: str = field(default_factory=new_guid)
@@ -1183,8 +1305,10 @@ class DrainageSystem:
     depth_area_volume: list[DepthAreaVolume] = field(default_factory=list)
     inlets: list[InletDetail] = field(default_factory=list)
     outlets: list[OutletDetail] = field(default_factory=list)
-    _raw_element: Optional[Element] = field(default=None, repr=False)
-    _element_tag: str = "PondDSys"
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _element_tag: str = field(default="PondDSys", init=False, repr=False, compare=False)
 
     @classmethod
     def from_xml(cls, elem: Element) -> DrainageSystem:
@@ -1210,11 +1334,13 @@ class DrainageSystem:
         dav_elem = elem.find("DepAreVols")
         if dav_elem is not None:
             for row in dav_elem.findall("DepAreVol"):
-                dav.append(DepthAreaVolume(
-                    depth=get_float(row, "Depth"),
-                    area=get_float(row, "SmallArea"),
-                    volume=get_float(row, "PndStgVol"),
-                ))
+                dav.append(
+                    DepthAreaVolume(
+                        depth=get_float(row, "Depth"),
+                        area=get_float(row, "SmallArea"),
+                        volume=get_float(row, "PndStgVol"),
+                    )
+                )
 
         inlets = []
         inlet_dets = elem.find("InletDetails")
@@ -1235,12 +1361,13 @@ class DrainageSystem:
             if mvc is not None:
                 mannings_n = get_float(mvc, "ManningsN")
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             label=get_str(elem, "Label"),
             guid=get_str(elem, "GUID", new_guid()),
             system_type=dsys_type,
-            x=x, y=y,
+            x=x,
+            y=y,
             is_outfall=get_bool(elem, "IsOut"),
             cover_level=get_float(elem, "CL"),
             depth=get_float(elem, "Depth"),
@@ -1277,16 +1404,16 @@ class DrainageSystem:
             depth_area_volume=dav,
             inlets=inlets,
             outlets=outlets,
-            _raw_element=elem,
-            _element_tag=tag,
         )
+        obj._raw_element = elem
+        obj._element_tag = tag
+        return obj
 
     def to_xml(self, index: Optional[int] = None) -> Element:
-        import copy as _copy
         idx = index if index is not None else self.index
 
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", idx)
             elem.set("Label", self.label)
             elem.set("GUID", self.guid)

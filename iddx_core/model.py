@@ -9,15 +9,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .enums import ELEMENT_TO_DSYS_TYPE
 from .exceptions import IddxParseError, ElementNotFoundError
 from .phase import Phase
 from .rainfall import RainfallSource
-from .nodes import Catchment, Junction, DrainageSystem
-from .connections import PipeConnection
 from .utils import (
-    get_int, get_bool, get_str, get_float, set_int, set_bool, set_float,
-    new_guid, make_ver_guid, find_or_create,
+    get_int,
+    get_str,
+    set_int,
+    set_bool,
+    new_guid,
+    make_ver_guid,
 )
 
 logger = logging.getLogger("iddx_core.model")
@@ -26,7 +27,7 @@ logger = logging.getLogger("iddx_core.model")
 RAINFALL_SOURCE_TAGS = ("NOAA", "FEH", "FSR", "CustomRain")
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AuthorInfo:
     product: str = "InfoDrainage"
     manufacturer: str = "Autodesk, Inc."
@@ -35,7 +36,7 @@ class AuthorInfo:
     date: str = ""
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnitSettings:
     region: str = "United States"
     depth: int = 5
@@ -55,17 +56,22 @@ class UnitSettings:
     infiltration: int = 2
 
 
-@dataclass
+@dataclass(kw_only=True)
 class IddxModel:
     """Top-level model object representing an InfoDrainage .iddx project file."""
+
     filepath: Optional[Path] = None
     author: AuthorInfo = field(default_factory=AuthorInfo)
     units: UnitSettings = field(default_factory=UnitSettings)
     db_ver_guid: str = ""
     phases: dict[str, Phase] = field(default_factory=dict)
     rainfall_sources: list[RainfallSource] = field(default_factory=list)
-    _tree: Optional[ET.ElementTree] = field(default=None, repr=False)
-    _root: Optional[Element] = field(default=None, repr=False)
+    _tree: Optional[ET.ElementTree] = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _root: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     # -- Factory methods ---------------------------------------------------
 
@@ -137,20 +143,22 @@ class IddxModel:
                     p = Phase.from_xml(phase_elem)
                     phases[p.label] = p
 
-        return cls(
+        obj = cls(
             filepath=filepath,
             author=author,
             units=units,
             db_ver_guid=db_ver_guid,
             phases=phases,
             rainfall_sources=rainfall_sources,
-            _tree=tree,
-            _root=root,
         )
+        obj._tree = tree
+        obj._root = root
+        return obj
 
     @classmethod
     def new(
         cls,
+        *,
         region: str = "United States",
         product_version: str = "2026.4",
         user: str = "",
@@ -175,13 +183,33 @@ class IddxModel:
         u = Element("Units")
         u.set("Region", region)
         for attr, val in [
-            ("Depth", 5), ("FinLen", 2), ("SrtLen", 2), ("MedLength", 5),
-            ("SmalArea", 5), ("LgArea", 5), ("Volume", 4), ("SmlFlow", 1),
-            ("MdmFlow", 7), ("LrgFlow", 2), ("Velocity", 2), ("Viscosity", 9),
-            ("Conc", 0), ("Slope", 3), ("Rain", 1), ("Rain_Dept", 1),
-            ("Infl", 2), ("Evap", 1), ("Intensity_Flow", 0), ("Mass", 3),
-            ("Load", 6), ("SmlTime", 1), ("MedTime", 0), ("LrgTime", 1),
-            ("TimeFrmt", 1), ("DateFrmt", 1), ("Perc", 0),
+            ("Depth", 5),
+            ("FinLen", 2),
+            ("SrtLen", 2),
+            ("MedLength", 5),
+            ("SmalArea", 5),
+            ("LgArea", 5),
+            ("Volume", 4),
+            ("SmlFlow", 1),
+            ("MdmFlow", 7),
+            ("LrgFlow", 2),
+            ("Velocity", 2),
+            ("Viscosity", 9),
+            ("Conc", 0),
+            ("Slope", 3),
+            ("Rain", 1),
+            ("Rain_Dept", 1),
+            ("Infl", 2),
+            ("Evap", 1),
+            ("Intensity_Flow", 0),
+            ("Mass", 3),
+            ("Load", 6),
+            ("SmlTime", 1),
+            ("MedTime", 0),
+            ("LrgTime", 1),
+            ("TimeFrmt", 1),
+            ("DateFrmt", 1),
+            ("Perc", 0),
         ]:
             set_int(u, attr, val)
         site.append(u)
@@ -208,12 +236,26 @@ class IddxModel:
         _add_default_display_settings(site)
 
         for tag in (
-            "compSheets", "reportingSheet", "AudRep", "NumScheme",
-            "ProfileCADOptions", "MHSCADOptions", "PlotSettings",
-            "Polls", "StormAnalCriteria", "DryAnalCriteria", "Tables",
-            "FlexReportData", "GISImportMap", "GISExportMap",
-            "TextImportMap", "TextExportMap", "StormNetDesCrit",
-            "FoulNetDesCrit", "FFData", "PartFamilies",
+            "compSheets",
+            "reportingSheet",
+            "AudRep",
+            "NumScheme",
+            "ProfileCADOptions",
+            "MHSCADOptions",
+            "PlotSettings",
+            "Polls",
+            "StormAnalCriteria",
+            "DryAnalCriteria",
+            "Tables",
+            "FlexReportData",
+            "GISImportMap",
+            "GISExportMap",
+            "TextImportMap",
+            "TextExportMap",
+            "StormNetDesCrit",
+            "FoulNetDesCrit",
+            "FFData",
+            "PartFamilies",
         ):
             site.append(Element(tag))
 
@@ -239,7 +281,7 @@ class IddxModel:
 
         tree = ET.ElementTree(root)
 
-        return cls(
+        obj = cls(
             author=AuthorInfo(
                 product="InfoDrainage",
                 manufacturer="Autodesk, Inc.",
@@ -249,11 +291,29 @@ class IddxModel:
             ),
             units=UnitSettings(region=region),
             db_ver_guid=db_guid,
-            _tree=tree,
-            _root=root,
         )
+        obj._tree = tree
+        obj._root = root
+        return obj
+
+    # -- Context manager ---------------------------------------------------
+
+    def __enter__(self) -> IddxModel:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        # Intentionally does NOT auto-save. Save explicitly with .save()
+        # so accidental exceptions don't write a corrupt file.
+        return None
 
     # -- Phase management --------------------------------------------------
+
+    def get_phase(self, label: str) -> Phase:
+        """Return the phase with the given label, or raise ElementNotFoundError."""
+        phase = self.phases.get(label)
+        if phase is None:
+            raise ElementNotFoundError("Phase", label)
+        return phase
 
     def add_phase(self, phase: Phase) -> Phase:
         phase.index = len(self.phases)
@@ -442,9 +502,19 @@ def _add_default_display_settings(site: Element) -> None:
 
     lf = Element("LayerFlags")
     for attr in (
-        "LFTerrain", "LFCad", "LFGis", "LFBkImage",
-        "LFNFP", "LFInf", "LFDS", "LFJnc", "LFCon",
-        "LFAnn", "LFLandUse", "LFSoilType", "LFMNode",
+        "LFTerrain",
+        "LFCad",
+        "LFGis",
+        "LFBkImage",
+        "LFNFP",
+        "LFInf",
+        "LFDS",
+        "LFJnc",
+        "LFCon",
+        "LFAnn",
+        "LFLandUse",
+        "LFSoilType",
+        "LFMNode",
     ):
         set_bool(lf, attr, True)
     ds.append(lf)

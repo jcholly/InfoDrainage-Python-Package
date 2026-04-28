@@ -5,9 +5,16 @@ from dataclasses import dataclass, field
 from xml.etree.ElementTree import Element
 from typing import Optional
 
-from .enums import ConnectionType, CONNECTION_ELEMENTS, ELEMENT_TO_CONNECTION_TYPE
+from .enums import ConnectionType, ELEMENT_TO_CONNECTION_TYPE
 from .utils import (
-    get_float, get_int, get_bool, get_str, set_float, set_int, set_bool,
+    RawXmlBacked,
+    get_float,
+    get_int,
+    get_bool,
+    get_str,
+    set_float,
+    set_int,
+    set_bool,
     new_guid,
 )
 
@@ -22,6 +29,7 @@ TAG_FOR_TYPE = {
 @dataclass
 class CrossSectionPoint:
     """A single point in a custom cross-section profile."""
+
     x: float = 0.0
     y: float = 0.0
 
@@ -29,6 +37,7 @@ class CrossSectionPoint:
 @dataclass
 class CrossSectionDetails:
     """Custom cross-section geometry for CustomCon bypass connections."""
+
     con_covered: bool = False
     diameter: float = 0.0
     points: list[CrossSectionPoint] = field(default_factory=list)
@@ -39,10 +48,12 @@ class CrossSectionDetails:
         coords = elem.find("Coords2DShort")
         if coords is not None:
             for c in coords.findall("Coordinate2DShort"):
-                pts.append(CrossSectionPoint(
-                    x=get_float(c, "XSh"),
-                    y=get_float(c, "YSh"),
-                ))
+                pts.append(
+                    CrossSectionPoint(
+                        x=get_float(c, "XSh"),
+                        y=get_float(c, "YSh"),
+                    )
+                )
         return cls(
             con_covered=get_bool(elem, "ConCovered"),
             diameter=get_float(elem, "Diam"),
@@ -67,6 +78,7 @@ class CrossSectionDetails:
 @dataclass
 class RationalResults:
     """Rational-method design results stored on a connection (read-only output)."""
+
     path_guid: str = ""
     rainfall_intensity: float = 0.0
     time_of_concentration: float = 0.0
@@ -101,6 +113,7 @@ class RationalResults:
 @dataclass
 class UpstreamTotals:
     """Upstream accumulation totals stored on a connection (read-only output)."""
+
     base_flow: float = 0.0
     area: float = 0.0
     contributing_area: float = 0.0
@@ -124,9 +137,10 @@ class UpstreamTotals:
         )
 
 
-@dataclass
-class Connection:
+@dataclass(kw_only=True)
+class Connection(RawXmlBacked):
     """Represents a pipe, channel, or culvert connection between two nodes."""
+
     index: int = 0
     label: str = ""
     guid: str = field(default_factory=new_guid)
@@ -159,8 +173,10 @@ class Connection:
     cross_section: Optional[CrossSectionDetails] = None
     rational_results: Optional[RationalResults] = None
     upstream_totals: Optional[UpstreamTotals] = None
-    _element_tag: str = "PipeCon"
-    _raw_element: Optional[Element] = field(default=None, repr=False)
+    _element_tag: str = field(default="PipeCon", init=False, repr=False, compare=False)
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @property
     def diameter_inches(self) -> float:
@@ -210,11 +226,13 @@ class Connection:
         c3d_elem = elem.find("Coord3Ds")
         if c3d_elem is not None:
             for c in c3d_elem.findall("Coordinate3D"):
-                coords_3d.append((
-                    get_float(c, "X"),
-                    get_float(c, "Y"),
-                    get_float(c, "Z"),
-                ))
+                coords_3d.append(
+                    (
+                        get_float(c, "X"),
+                        get_float(c, "Y"),
+                        get_float(c, "Z"),
+                    )
+                )
 
         cross_section = None
         crs_elem = elem.find("CrsSctDetails")
@@ -241,7 +259,7 @@ class Connection:
             except ValueError:
                 conn_type = ConnectionType.CIRCULAR_PIPE
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             label=get_str(elem, "Label"),
             guid=get_str(elem, "GUID", new_guid()),
@@ -274,16 +292,16 @@ class Connection:
             cross_section=cross_section,
             rational_results=rat_res,
             upstream_totals=us_tot,
-            _element_tag=tag,
-            _raw_element=elem,
         )
+        obj._element_tag = tag
+        obj._raw_element = elem
+        return obj
 
     def to_xml(self, index: Optional[int] = None) -> Element:
-        import copy as _copy
         idx = index if index is not None else self.index
 
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", idx)
             elem.set("Label", self.label)
             elem.set("GUID", self.guid)

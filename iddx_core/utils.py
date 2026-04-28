@@ -1,9 +1,28 @@
 """XML parsing utilities and helpers for .iddx files."""
 
+import copy
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from xml.etree.ElementTree import Element
 from typing import Optional
+
+
+class RawXmlBacked:
+    """Mixin for dataclasses that round-trip through XML.
+
+    Subclasses are expected to declare a ``_raw_element: Optional[Element]`` field
+    (initialised to ``None`` and excluded from ``init`` / ``repr`` / ``compare``)
+    that holds the originally-parsed Element. This lets ``to_xml`` deep-copy and
+    patch the raw tree, preserving unknown XML children that the Python model
+    doesn't explicitly mirror.
+    """
+
+    def _copy_raw(self) -> Optional[Element]:
+        """Return a deep copy of the raw parsed element, or None if absent."""
+        elem = getattr(self, "_raw_element", None)
+        if elem is None:
+            return None
+        return copy.deepcopy(elem)
 
 
 def new_guid() -> str:

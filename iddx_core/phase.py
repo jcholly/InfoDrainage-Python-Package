@@ -6,17 +6,26 @@ from xml.etree.ElementTree import Element
 from typing import Optional
 
 from .enums import PhaseType, ALL_DSYS_TAGS, ALL_CONNECTION_TAGS
+from .exceptions import ElementNotFoundError
 from .nodes import Catchment, Junction, DrainageSystem
 from .connections import Connection
 from .utils import (
-    get_int, get_bool, get_str, get_float, set_int, set_bool, set_float,
-    new_guid, find_or_create, make_ver_guid,
+    RawXmlBacked,
+    get_int,
+    get_bool,
+    get_str,
+    set_int,
+    set_bool,
+    set_float,
+    new_guid,
+    make_ver_guid,
 )
 
 
-@dataclass
-class Phase:
+@dataclass(kw_only=True)
+class Phase(RawXmlBacked):
     """A design phase containing all network elements."""
+
     index: int = 0
     label: str = ""
     guid: str = field(default_factory=new_guid)
@@ -28,9 +37,14 @@ class Phase:
     junctions: list[Junction] = field(default_factory=list)
     drainage_systems: list[DrainageSystem] = field(default_factory=list)
     connections: list[Connection] = field(default_factory=list)
-    _raw_element: Optional[Element] = field(default=None, repr=False)
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     # -- Lookups -----------------------------------------------------------
+    #
+    # find_*  returns Optional[X] (None if not found) — for "maybe exists" lookups.
+    # get_*   raises ElementNotFoundError              — for "must exist" lookups.
 
     def find_catchment(self, label: str) -> Optional[Catchment]:
         for c in self.catchments:
@@ -38,11 +52,25 @@ class Phase:
                 return c
         return None
 
+    def get_catchment(self, label: str) -> Catchment:
+        """Return the catchment with the given label, or raise ElementNotFoundError."""
+        c = self.find_catchment(label)
+        if c is None:
+            raise ElementNotFoundError("Catchment", label)
+        return c
+
     def find_junction(self, label: str) -> Optional[Junction]:
         for j in self.junctions:
             if j.label == label:
                 return j
         return None
+
+    def get_junction(self, label: str) -> Junction:
+        """Return the junction with the given label, or raise ElementNotFoundError."""
+        j = self.find_junction(label)
+        if j is None:
+            raise ElementNotFoundError("Junction", label)
+        return j
 
     def find_junction_by_guid(self, guid: str) -> Optional[Junction]:
         for j in self.junctions:
@@ -56,11 +84,25 @@ class Phase:
                 return ds
         return None
 
+    def get_drainage_system(self, label: str) -> DrainageSystem:
+        """Return the drainage system with the given label, or raise ElementNotFoundError."""
+        ds = self.find_drainage_system(label)
+        if ds is None:
+            raise ElementNotFoundError("DrainageSystem", label)
+        return ds
+
     def find_connection(self, label: str) -> Optional[Connection]:
         for c in self.connections:
             if c.label == label:
                 return c
         return None
+
+    def get_connection(self, label: str) -> Connection:
+        """Return the connection with the given label, or raise ElementNotFoundError."""
+        c = self.find_connection(label)
+        if c is None:
+            raise ElementNotFoundError("Connection", label)
+        return c
 
     # -- Mutators ----------------------------------------------------------
 
@@ -181,7 +223,7 @@ class Phase:
                 for conn_elem in conexs.findall(tag):
                     connections.append(Connection.from_xml(conn_elem))
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             label=get_str(elem, "Label"),
             guid=get_str(elem, "GUID", new_guid()),
@@ -193,15 +235,15 @@ class Phase:
             junctions=junctions,
             drainage_systems=drainage_systems,
             connections=connections,
-            _raw_element=elem,
         )
+        obj._raw_element = elem
+        return obj
 
     def to_xml(self, index: Optional[int] = None) -> Element:
-        import copy as _copy
         idx = index if index is not None else self.index
 
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", idx)
             elem.set("GUID", self.guid)
             elem.set("Label", self.label)
@@ -285,9 +327,19 @@ class Phase:
             conexs.append(c.to_xml(index=i))
         elem.append(conexs)
 
-        for tag in ("Paths", "SurfFile", "CADFiles", "GISFiles",
-                     "BackImages", "WatrQual", "AnaResFiles",
-                     "AnalysisRuns", "LevelHyds", "PartsMappings", "LUCache"):
+        for tag in (
+            "Paths",
+            "SurfFile",
+            "CADFiles",
+            "GISFiles",
+            "BackImages",
+            "WatrQual",
+            "AnaResFiles",
+            "AnalysisRuns",
+            "LevelHyds",
+            "PartsMappings",
+            "LUCache",
+        ):
             elem.append(Element(tag))
 
         qse = Element("QSE")
@@ -325,10 +377,8 @@ class Phase:
         (AnalysisRuns, connectivity details, etc.) that the Python model
         doesn't explicitly manage.
         """
-        import copy as _copy
-
-        if self._raw_element is not None:
-            new_elem = _copy.deepcopy(self._raw_element)
+        new_elem = self._copy_raw()
+        if new_elem is not None:
             new_elem.set("Label", new_label)
             new_elem.set("GUID", new_guid())
             new_elem.set("verGuid", make_ver_guid())

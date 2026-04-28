@@ -67,6 +67,7 @@ def _resolve_phase(model, phase_name: str | None):
 # Commands
 # ---------------------------------------------------------------------------
 
+
 def cmd_summary(args: argparse.Namespace) -> None:
     """Print a full inventory of the .iddx model."""
     model = _load_model(args.file)
@@ -102,6 +103,7 @@ def cmd_summary(args: argparse.Namespace) -> None:
         print()
 
     from .results import find_results
+
     result_files = find_results(args.file)
     if result_files:
         print("  SWMM Results:")
@@ -116,45 +118,61 @@ def cmd_summary(args: argparse.Namespace) -> None:
 
 def cmd_pipes(args: argparse.Namespace) -> None:
     """Export a pipe schedule."""
+    from .results import _csv_safe
+
     model = _load_model(args.file)
     phase = _resolve_phase(model, args.phase)
 
     headers = [
-        "Label", "Type", "From", "To",
-        "Length", "Diameter_mm", "Diameter_in",
-        "Manning_n", "Slope",
-        "US_IL", "DS_IL", "US_CL", "DS_CL",
+        "Label",
+        "Type",
+        "From",
+        "To",
+        "Length",
+        "Diameter_mm",
+        "Diameter_in",
+        "Manning_n",
+        "Slope",
+        "US_IL",
+        "DS_IL",
+        "US_CL",
+        "DS_CL",
         "Barrels",
     ]
 
     rows = []
     for conn in phase.connections:
-        rows.append([
-            conn.label,
-            conn.connection_type.name,
-            conn.from_junction_label,
-            conn.to_junction_label,
-            f"{conn.length:.2f}",
-            f"{conn.diameter:.1f}",
-            f"{conn.diameter_inches:.2f}",
-            f"{conn.mannings_n:.4f}",
-            f"{conn.slope:.6f}",
-            f"{conn.us_invert_level:.3f}",
-            f"{conn.ds_invert_level:.3f}",
-            f"{conn.us_cover_level:.3f}",
-            f"{conn.ds_cover_level:.3f}",
-            str(conn.num_barrels),
-        ])
+        rows.append(
+            [
+                _csv_safe(conn.label),
+                conn.connection_type.name,
+                _csv_safe(conn.from_junction_label),
+                _csv_safe(conn.to_junction_label),
+                f"{conn.length:.2f}",
+                f"{conn.diameter:.1f}",
+                f"{conn.diameter_inches:.2f}",
+                f"{conn.mannings_n:.4f}",
+                f"{conn.slope:.6f}",
+                f"{conn.us_invert_level:.3f}",
+                f"{conn.ds_invert_level:.3f}",
+                f"{conn.us_cover_level:.3f}",
+                f"{conn.ds_cover_level:.3f}",
+                str(conn.num_barrels),
+            ]
+        )
 
     if args.csv:
         out_path = Path(args.csv)
-        with open(out_path, "w", newline="") as f:
+        with open(out_path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(headers)
             w.writerows(rows)
         print(f"Pipe schedule written to {out_path} ({len(rows)} pipes)")
     else:
-        widths = [max(len(h), max((len(r[i]) for r in rows), default=0)) for i, h in enumerate(headers)]
+        widths = [
+            max(len(h), max((len(r[i]) for r in rows), default=0))
+            for i, h in enumerate(headers)
+        ]
         header_line = "  ".join(h.ljust(w) for h, w in zip(headers, widths))
         print(f"\n  Pipe Schedule — Phase: {phase.label}\n")
         print(f"  {header_line}")
@@ -201,32 +219,78 @@ def cmd_validate(args: argparse.Namespace) -> None:
         cover_ds = conn.ds_cover_level - conn.ds_invert_level
         if conn.us_cover_level > 0 and conn.us_invert_level > 0:
             if cover_us < 0:
-                findings.append(("ERROR", conn.label, f"US invert ({conn.us_invert_level:.3f}) above cover ({conn.us_cover_level:.3f})"))
+                findings.append(
+                    (
+                        "ERROR",
+                        conn.label,
+                        f"US invert ({conn.us_invert_level:.3f}) above cover ({conn.us_cover_level:.3f})",
+                    )
+                )
             elif cover_us < conn.diameter / 1000.0:
-                findings.append(("WARNING", conn.label, f"US cover depth ({cover_us:.3f}) less than pipe diameter"))
+                findings.append(
+                    (
+                        "WARNING",
+                        conn.label,
+                        f"US cover depth ({cover_us:.3f}) less than pipe diameter",
+                    )
+                )
         if conn.ds_cover_level > 0 and conn.ds_invert_level > 0:
             if cover_ds < 0:
-                findings.append(("ERROR", conn.label, f"DS invert ({conn.ds_invert_level:.3f}) above cover ({conn.ds_cover_level:.3f})"))
+                findings.append(
+                    (
+                        "ERROR",
+                        conn.label,
+                        f"DS invert ({conn.ds_invert_level:.3f}) above cover ({conn.ds_cover_level:.3f})",
+                    )
+                )
             elif cover_ds < conn.diameter / 1000.0:
-                findings.append(("WARNING", conn.label, f"DS cover depth ({cover_ds:.3f}) less than pipe diameter"))
+                findings.append(
+                    (
+                        "WARNING",
+                        conn.label,
+                        f"DS cover depth ({cover_ds:.3f}) less than pipe diameter",
+                    )
+                )
 
         if conn.length > 0 and conn.us_invert_level > 0 and conn.ds_invert_level > 0:
             grade = (conn.us_invert_level - conn.ds_invert_level) / conn.length
             if grade < 0:
-                findings.append(("WARNING", conn.label, f"Adverse slope (grade={grade:.4f}), pipe flows uphill"))
+                findings.append(
+                    (
+                        "WARNING",
+                        conn.label,
+                        f"Adverse slope (grade={grade:.4f}), pipe flows uphill",
+                    )
+                )
             elif grade == 0:
-                findings.append(("WARNING", conn.label, "Zero slope — no gravitational flow"))
+                findings.append(
+                    ("WARNING", conn.label, "Zero slope — no gravitational flow")
+                )
 
         if conn.mannings_n <= 0:
-            findings.append(("ERROR", conn.label, f"Invalid Manning's n ({conn.mannings_n})"))
+            findings.append(
+                ("ERROR", conn.label, f"Invalid Manning's n ({conn.mannings_n})")
+            )
         elif conn.mannings_n > 0.05:
-            findings.append(("WARNING", conn.label, f"Unusually high Manning's n ({conn.mannings_n:.4f})"))
+            findings.append(
+                (
+                    "WARNING",
+                    conn.label,
+                    f"Unusually high Manning's n ({conn.mannings_n:.4f})",
+                )
+            )
 
     for j in phase.junctions:
         if j.cover_level > 0 and j.invert_level > 0:
             depth = j.cover_level - j.invert_level
             if depth <= 0:
-                findings.append(("ERROR", j.label, f"Invert ({j.invert_level:.3f}) at or above cover ({j.cover_level:.3f})"))
+                findings.append(
+                    (
+                        "ERROR",
+                        j.label,
+                        f"Invert ({j.invert_level:.3f}) at or above cover ({j.cover_level:.3f})",
+                    )
+                )
 
     junction_guids = {j.guid for j in phase.junctions}
     ds_guids = {ds.guid for ds in phase.drainage_systems}
@@ -234,13 +298,31 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
     for conn in phase.connections:
         if conn.from_junction_guid and conn.from_junction_guid not in all_node_guids:
-            findings.append(("ERROR", conn.label, f"FromSource GUID {conn.from_junction_guid[:8]}... references missing node"))
+            findings.append(
+                (
+                    "ERROR",
+                    conn.label,
+                    f"FromSource GUID {conn.from_junction_guid[:8]}... references missing node",
+                )
+            )
         if conn.to_junction_guid and conn.to_junction_guid not in all_node_guids:
-            findings.append(("ERROR", conn.label, f"ToDest GUID {conn.to_junction_guid[:8]}... references missing node"))
+            findings.append(
+                (
+                    "ERROR",
+                    conn.label,
+                    f"ToDest GUID {conn.to_junction_guid[:8]}... references missing node",
+                )
+            )
 
     for c in phase.catchments:
         if c.to_dest_guid and c.to_dest_guid not in all_node_guids:
-            findings.append(("WARNING", c.label, f"Catchment drains to GUID {c.to_dest_guid[:8]}... which is not in this phase"))
+            findings.append(
+                (
+                    "WARNING",
+                    c.label,
+                    f"Catchment drains to GUID {c.to_dest_guid[:8]}... which is not in this phase",
+                )
+            )
         if c.area <= 0:
             findings.append(("WARNING", c.label, "Catchment has zero or negative area"))
 
@@ -260,7 +342,9 @@ def cmd_validate(args: argparse.Namespace) -> None:
             try:
                 reader = ResultsReader(result_path)
             except (ValueError, FileNotFoundError) as exc:
-                findings.append(("ERROR", result_path.name, f"Cannot read SWMM output: {exc}"))
+                findings.append(
+                    ("ERROR", result_path.name, f"Cannot read SWMM output: {exc}")
+                )
                 continue
 
             parts = result_path.stem.rsplit("_", 2)
@@ -269,30 +353,48 @@ def cmd_validate(args: argparse.Namespace) -> None:
             for nid in reader.node_ids:
                 ns = reader.node_summary(nid, label=label_map.get(nid, nid))
                 if ns.peak_flooding > 0.001:
-                    findings.append((
-                        "WARNING", ns.label,
-                        f"Flooding detected: {ns.peak_flooding:.4f} (RP={rp_label})"
-                    ))
+                    findings.append(
+                        (
+                            "WARNING",
+                            ns.label,
+                            f"Flooding detected: {ns.peak_flooding:.4f} (RP={rp_label})",
+                        )
+                    )
 
             for lid in reader.link_ids:
                 ls = reader.link_summary(lid, label=label_map.get(lid, lid))
                 if ls.max_capacity > 1.0:
-                    findings.append((
-                        "WARNING", ls.label,
-                        f"Surcharging: capacity ratio {ls.max_capacity:.2f} (RP={rp_label})"
-                    ))
+                    findings.append(
+                        (
+                            "WARNING",
+                            ls.label,
+                            f"Surcharging: capacity ratio {ls.max_capacity:.2f} (RP={rp_label})",
+                        )
+                    )
                 if 0 < ls.peak_velocity < 0.6:
-                    findings.append((
-                        "WARNING", ls.label,
-                        f"Low velocity {ls.peak_velocity:.3f} m/s — self-cleansing risk (RP={rp_label})"
-                    ))
+                    findings.append(
+                        (
+                            "WARNING",
+                            ls.label,
+                            f"Low velocity {ls.peak_velocity:.3f} m/s — self-cleansing risk (RP={rp_label})",
+                        )
+                    )
                 elif ls.peak_velocity > 6.0:
-                    findings.append((
-                        "WARNING", ls.label,
-                        f"High velocity {ls.peak_velocity:.3f} m/s — erosion risk (RP={rp_label})"
-                    ))
+                    findings.append(
+                        (
+                            "WARNING",
+                            ls.label,
+                            f"High velocity {ls.peak_velocity:.3f} m/s — erosion risk (RP={rp_label})",
+                        )
+                    )
     else:
-        findings.append(("INFO", "Results", "No SWMM output files found — run analysis in InfoDrainage to enable results checks"))
+        findings.append(
+            (
+                "INFO",
+                "Results",
+                "No SWMM output files found — run analysis in InfoDrainage to enable results checks",
+            )
+        )
 
     # --- Output ---
 
@@ -321,6 +423,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
 # Argument parser
 # ---------------------------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="iddx",
@@ -342,18 +445,32 @@ def build_parser() -> argparse.ArgumentParser:
     # pipes
     p_pipes = sub.add_parser("pipes", help="Export pipe schedule")
     p_pipes.add_argument("file", help="Path to .iddx file")
-    p_pipes.add_argument("--phase", default=None, help="Phase name (default: first phase)")
-    p_pipes.add_argument("--csv", default=None, metavar="OUTPUT", help="Write to CSV file instead of console")
+    p_pipes.add_argument(
+        "--phase", default=None, help="Phase name (default: first phase)"
+    )
+    p_pipes.add_argument(
+        "--csv",
+        default=None,
+        metavar="OUTPUT",
+        help="Write to CSV file instead of console",
+    )
 
     # compare
     p_compare = sub.add_parser("compare", help="Compare SWMM results across scenarios")
     p_compare.add_argument("file", help="Path to .iddx file")
-    p_compare.add_argument("--csv", default=None, metavar="OUTPUT", help="Write to CSV file instead of console")
+    p_compare.add_argument(
+        "--csv",
+        default=None,
+        metavar="OUTPUT",
+        help="Write to CSV file instead of console",
+    )
 
     # validate
     p_validate = sub.add_parser("validate", help="Run design validation checks")
     p_validate.add_argument("file", help="Path to .iddx file")
-    p_validate.add_argument("--phase", default=None, help="Phase name (default: first phase)")
+    p_validate.add_argument(
+        "--phase", default=None, help="Phase name (default: first phase)"
+    )
 
     return parser
 
@@ -382,6 +499,7 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("%s", exc)
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 

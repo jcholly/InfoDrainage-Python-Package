@@ -6,7 +6,14 @@ from xml.etree.ElementTree import Element
 from typing import Optional
 
 from .utils import (
-    get_float, get_int, get_bool, get_str, set_float, set_int, set_bool,
+    RawXmlBacked,
+    get_float,
+    get_int,
+    get_bool,
+    get_str,
+    set_float,
+    set_int,
+    set_bool,
     new_guid,
 )
 
@@ -14,6 +21,7 @@ from .utils import (
 @dataclass
 class HyetographItem:
     """A single time-depth point in a storm hyetograph."""
+
     time: float = 0.0
     depth: float = 0.0
 
@@ -36,6 +44,7 @@ class HyetographItem:
 @dataclass
 class StormEvent:
     """A single storm definition (duration + return period + hyetograph)."""
+
     index: int = 0
     duration_minutes: float = 1440.0
     return_period: float = 1.0
@@ -99,7 +108,10 @@ class StormEvent:
 
         strm = Element("Strm")
         if with_hyetograph and self.hyetograph:
-            strm.set("Label", self.label or f"{self.return_period:.3f}_{self.duration_minutes:.2f}")
+            strm.set(
+                "Label",
+                self.label or f"{self.return_period:.3f}_{self.duration_minutes:.2f}",
+            )
             strm.set("Time", "0001-01-01T00:00:00")
             set_float(strm, "RunT", self.run_time)
             for i, h in enumerate(self.hyetograph):
@@ -110,9 +122,10 @@ class StormEvent:
         return elem
 
 
-@dataclass
-class RainfallSource:
+@dataclass(kw_only=True)
+class RainfallSource(RawXmlBacked):
     """A rainfall data source (NOAA, FEH, FSR, Custom)."""
+
     index: int = 0
     source_type: str = "NOAA"
     method: int = 1
@@ -123,7 +136,9 @@ class RainfallSource:
     ver_guid: str = field(default_factory=new_guid)
     storm_definitions: list[StormEvent] = field(default_factory=list)
     storm_hyetographs: list[StormEvent] = field(default_factory=list)
-    _raw_element: Optional[Element] = field(default=None, repr=False)
+    _raw_element: Optional[Element] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @property
     def return_periods(self) -> list[float]:
@@ -137,7 +152,9 @@ class RainfallSource:
                 seen.append(s.duration_minutes)
         return seen
 
-    def get_storm(self, return_period: float, duration: Optional[float] = None) -> Optional[StormEvent]:
+    def get_storm(
+        self, return_period: float, duration: Optional[float] = None
+    ) -> Optional[StormEvent]:
         """Find a storm event by return period and optionally duration."""
         for s in self.storm_hyetographs:
             if s.return_period == return_period:
@@ -160,7 +177,7 @@ class RainfallSource:
             for sd in viewer_details.findall("StrDet"):
                 storm_hyetographs.append(StormEvent.from_xml(sd))
 
-        return cls(
+        obj = cls(
             index=get_int(elem, "Index"),
             source_type=source_type,
             method=get_int(elem, "Method", 1),
@@ -171,14 +188,13 @@ class RainfallSource:
             ver_guid=get_str(elem, "verGuid", new_guid()),
             storm_definitions=storm_defs,
             storm_hyetographs=storm_hyetographs,
-            _raw_element=elem,
         )
+        obj._raw_element = elem
+        return obj
 
     def to_xml(self) -> Element:
-        import copy as _copy
-
-        if self._raw_element is not None:
-            elem = _copy.deepcopy(self._raw_element)
+        elem = self._copy_raw()
+        if elem is not None:
             set_int(elem, "Index", self.index)
             elem.set("Lab", self.label)
             elem.set("Guid", self.guid)
